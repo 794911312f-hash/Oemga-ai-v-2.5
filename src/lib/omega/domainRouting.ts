@@ -34,7 +34,9 @@ const DOMAIN_KEYWORDS: Record<Domain, string[]> = {
   science_factual: [
     "quantum", "physics", "biology", "chemistry", "universe", "planet", "history",
     "evidence", "experiment", "molecule", "genome", "cellular", "gravity", "energy",
-    "فيزياء", "كيمياء", "أحياء", "كون", "كوكب", "تاريخ", "تجربة", "ذرة", "طاقة", "جاذبية", "خلية"
+    "document", "pdf", "file", "report", "paper", "data", "sheet", "attachment",
+    "فيزياء", "كيمياء", "أحياء", "كون", "كوكب", "تاريخ", "تجربة", "ذرة", "طاقة", "جاذبية", "خلية",
+    "مستند", "وثيقة", "ملف", "تقرير", "بيانات", "مرفق", "مستندات", "وثائق", "دراسة", "بحث"
   ],
   creative_writing: [
     "story", "poem", "essay", "metaphor", "character", "creative", "fiction",
@@ -42,8 +44,8 @@ const DOMAIN_KEYWORDS: Record<Domain, string[]> = {
     "قصة", "شعر", "رواية", "مقال", "استعارة", "شخصية", "إبداعي", "حوار", "قافية", "خيال"
   ],
   general: [
-    "who", "what", "where", "when", "how", "hello", "help", "summary", "explain",
-    "من", "ماذا", "أين", "متى", "كيف", "مرحبا", "اشرح", "لخص", "مساعدة"
+    "who", "what", "where", "when", "how", "hello", "help", "summary", "explain", "analyze", "review",
+    "من", "ماذا", "أين", "متى", "كيف", "مرحبا", "اشرح", "لخص", "حلل", "تحليل", "راجع", "مساعدة"
   ],
 };
 
@@ -61,10 +63,11 @@ const DOMAIN_MODEL_PRIORITY: Record<Domain, ModelId[]> = {
     "omega-kernel-c1",
   ],
   science_factual: [
-    "gemini-3.8-flash",
-    "qwen-2-5-compat",
     "gpt-4o-compat",
-    "omega-kernel-c2",
+    "gemini-3.8-flash",
+    "deepseek-r1-compat",
+    "qwen-2-5-compat",
+    "claude-3-5-sonnet-compat",
   ],
   creative_writing: [
     "llama-3-3-compat",
@@ -73,11 +76,12 @@ const DOMAIN_MODEL_PRIORITY: Record<Domain, ModelId[]> = {
     "gpt-4o-compat",
   ],
   general: [
-    "qwen-2-5-compat",
-    "llama-3-3-compat",
+    "gpt-4o-compat",
     "gemini-3.8-flash",
-    "claude-3-5-sonnet-compat",
     "deepseek-r1-compat",
+    "qwen-2-5-compat",
+    "claude-3-5-sonnet-compat",
+    "llama-3-3-compat",
   ],
 };
 

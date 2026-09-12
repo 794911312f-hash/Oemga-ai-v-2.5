@@ -84,7 +84,7 @@ export const AttachmentPicker: React.FC<AttachmentPickerProps> = ({
         className="hidden"
         onChange={handleFileChange}
         disabled={disabled}
-        accept=".txt,.md,.pdf,.json,.csv,.js,.ts,.tsx,.py,.html,.css,.xml,.log,image/*"
+        accept=".txt,.md,.pdf,.doc,.docx,.json,.csv,.js,.ts,.tsx,.py,.html,.css,.xml,.log,image/*"
       />
 
       {/* Attachment Button */}

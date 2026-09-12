@@ -9,6 +9,8 @@ import {
   Sparkles,
   Database,
   ExternalLink,
+  Copy,
+  Check,
 } from "lucide-react";
 import { globalOmegaMemory, type MemoryNode } from "../../lib/omega/memory";
 import type { Domain } from "../../lib/omega/domainRouting";
@@ -22,6 +24,30 @@ export const MemoryView: React.FC = () => {
   const [searchResults, setSearchResults] = useState<
     { node: MemoryNode; similarity: number }[] | null
   >(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleCopy = async (text: string, id: string) => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        textArea.style.top = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+      }
+      setCopiedId(id);
+      setTimeout(() => setCopiedId((prev) => (prev === id ? null : prev)), 2000);
+    } catch (e) {
+      console.error("Failed to copy memory:", e);
+    }
+  };
 
   // New Memory Modal state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -197,6 +223,18 @@ export const MemoryView: React.FC = () => {
                           تشابه: {(resultMatch.similarity * 100).toFixed(1)}%
                         </span>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(`${node.topic}\n\n${node.content}`, node.id)}
+                        className="text-slate-500 hover:text-cyan-300 p-1 transition-colors cursor-pointer"
+                        title="نسخ هذه المعرفة"
+                      >
+                        {copiedId === node.id ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                      </button>
                       <button
                         type="button"
                         onClick={() => handleDelete(node.id)}

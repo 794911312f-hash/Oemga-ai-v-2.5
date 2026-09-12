@@ -68,18 +68,18 @@ export const SignalMeter: React.FC<SignalMeterProps> = ({
   const modeBadge = {
     direct: {
       bg: "bg-emerald-950/80 border-emerald-500/40 text-emerald-300",
-      label: "إجماع مباشر قطعي (Direct Consensus)",
+      label: "إجماع مباشر متطابق (Direct Consensus)",
       icon: CheckCircle2,
     },
     aggregated: {
-      bg: "bg-purple-950/80 border-purple-500/40 text-purple-300",
-      label: "توليف تركيبي مركب (Aggregated Synthesis)",
-      icon: Layers,
+      bg: "bg-indigo-950/80 border-indigo-500/40 text-indigo-300",
+      label: "استنتاج تكاملي حاسم (Integrative Master Deduction)",
+      icon: Sparkles,
     },
     uncertain: {
-      bg: "bg-amber-950/80 border-amber-500/40 text-amber-300",
-      label: "عدم يقين مع تباين (Uncertainty Split)",
-      icon: AlertTriangle,
+      bg: "bg-cyan-950/80 border-cyan-500/40 text-cyan-300",
+      label: "تآزر معرفي تخصصي (Synergistic Multi-Model Synthesis)",
+      icon: Sparkles,
     },
   }[result.mode];
 

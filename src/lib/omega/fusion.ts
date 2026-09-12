@@ -192,33 +192,63 @@ async function aggregate(
   ranked: FusionCandidate[],
   opts: FusionOptions,
 ): Promise<string> {
-  opts.onStepProgress?.("resolving", "دمج وتأليف أقوى النقاط وحل أي تضارب دلالي...");
+  opts.onStepProgress?.("resolving", "الاستنتاج التكاملي الذكي: استخلاص الحقيقة القطعية من كافة الخوادم...");
+
+  // 1. Try server-side Master Integrative Deduction endpoint
+  try {
+    const deduceRes = await fetch("/api/omega/deduce", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question,
+        candidates: ranked.map((c) => ({
+          modelId: c.modelId,
+          text: c.text,
+          psi: c.psi,
+        })),
+        attachments: opts.attachments,
+        temperature: 0.3,
+      }),
+    });
+    if (deduceRes.ok) {
+      const data = await deduceRes.json();
+      if (data.ok && typeof data.text === "string" && data.text.trim()) {
+        return data.text.trim();
+      }
+    }
+  } catch {
+    // Continue to client-side completeWithModel
+  }
+
   const top = ranked.slice(0, Math.min(4, ranked.length));
   const messages: ChatMsg[] = [
     {
       role: "system",
       content:
-        "You are the Omega Consensus Aggregator within the Omega AI Multi-Model System (نظام أوميغا للذكاء الاصطناعي متعدد الخوادم). " +
-        "Multiple premier AI engines (such as Qwen 2.5 by Alibaba, Llama 3.3 by Meta, Google Gemini, DeepSeek R1, Claude, and GPT-4o) evaluated this query. " +
-        "Your role is to formulate a unified, authoritative response representing the Omega Consensus. " +
-        "Synthesize the strongest, most accurate points, resolve any semantic divergence, and provide a clear, coherent, rigorous answer. " +
-        "IDENTITY MANDATE: If the user asks who you are, whether you are Omega or Gemini or another model: Affirmatively state that this is the Omega AI Multi-Model Consensus System (نظام أوميغا للذكاء الاصطناعي), an advanced intelligence ecosystem that unifies and orchestrates multiple premier models (including Qwen, Llama, Gemini, DeepSeek, Claude, and GPT) through geometric consensus and verification. Never deny Omega's existence.",
+        "أنت أوميغا (Omega AI) — العقل الاستنتاجي الحاكم والحصيف كأذكى خبير إنساني في العالم.\n" +
+        "أمامك مساهمات متخصصة من عدة خوادم ذكاء اصطناعي (Qwen، DeepSeek R1، GPT-4o، Gemini، Claude).\n" +
+        "المطلوب منك بموجب الميثاق التكاملي لمنظومة أوميغا:\n" +
+        "1. الخوادم لا تتصارع ولا تتناقض؛ بل تتكامل: اجمع القوة الرياضية ومعادلات KaTeX ($...$ و $$...$$) من خادم الرياضيات، والتسلسل المنطقي من خادم الاستدلال، والتنظيم الموسوعي من خادم المعرفة.\n" +
+        "2. استنتج الإجابة الصحيحة والحاسمة بمنطق رصين وعلم دقيق وحل أي تباين ظاهري بين الخوادم.\n" +
+        "3. صُغ إجابة موحدة، شاملة، وواثقة ومكتملة تبرهن على براعة الذكاء التكاملي لنظام أوميغا.",
     },
     {
       role: "user",
       content:
-        `Question:\n${question}\n\n` +
-        top.map((c, i) => `Model Server [${c.modelId}] (ψ=${c.psi.toFixed(2)}):\n${c.text}`).join("\n\n---\n\n"),
+        `السؤال:\n${question}\n\n` +
+        top.map((c) => `[خادم ${c.modelId}] (معامل التوافق ψ=${c.psi.toFixed(2)}):\n${c.text}`).join("\n\n---\n\n"),
     },
   ];
+
   const result = await completeWithModel(opts.aggregatorModel, messages, {
     temperature: 0.3,
-    maxTokens: opts.maxTokens ?? 1024,
+    maxTokens: opts.maxTokens ?? 1200,
     keys: opts.keys,
     attachments: opts.attachments,
     searchGrounding: opts.searchGrounding,
   });
-  return result.ok ? result.text : top[0].text;
+
+  return result.ok && result.text.trim() ? result.text : top[0]?.text || "";
 }
 
 export async function fuseResponses(
@@ -227,7 +257,7 @@ export async function fuseResponses(
   opts: FusionOptions,
 ): Promise<FusionResult> {
   const startTime = Date.now();
-  opts.onStepProgress?.("routing", "تحديد المجال المعرفي وتوجيه النموذج المناسب...");
+  opts.onStepProgress?.("routing", "تحديد المجال المعرفي وتوجيه النماذج التخصصية...");
   const { domain, models: routedModels } = modelsForQuestion(question, opts.maxModelsPerDomain ?? 3);
   const models = opts.models ?? routedModels;
   const messages: ChatMsg[] = [...history, { role: "user", content: question }];
@@ -267,7 +297,7 @@ export async function fuseResponses(
     };
   }
 
-  opts.onStepProgress?.("embedding", "حساب التضمينات الدلالية وحساب مركز الثقل الهندسي...");
+  opts.onStepProgress?.("embedding", "حساب التضمينات الدلالية ومركز الثقل الهندسي...");
   const { psi, deltas, source, telemetry } = await scoreCandidates(raw, opts.keys);
   const weight = toWeights(psi);
   const candidates: FusionCandidate[] = raw
@@ -275,8 +305,7 @@ export async function fuseResponses(
     .sort((a, b) => b.psi - a.psi);
 
   const spread = candidates[0].psi - candidates[candidates.length - 1].psi;
-  const directThreshold = opts.directThreshold ?? 0.85;
-  const uncertainSpread = opts.uncertainSpread ?? 0.1;
+  const directThreshold = opts.directThreshold ?? 0.88;
 
   const fullTelemetry: FusionTelemetry = {
     ...telemetry,
@@ -285,9 +314,12 @@ export async function fuseResponses(
     durationMs: Date.now() - startTime,
   };
 
-  // Case 1: clear consensus — one answer clearly agrees with the pack.
-  // Note: For identity/system questions, route through aggregation to preserve Omega orchestration consensus
-  if (candidates[0].psi >= directThreshold && !isIdentityQuestion(question)) {
+  // Check if candidate 0 has extraordinary standalone consensus and no mathematical or identity gaps
+  const hasEquations = candidates.some((c) => c.text.includes("$$") || c.text.includes("$"));
+  const cand0HasEquations = candidates[0].text.includes("$$") || candidates[0].text.includes("$");
+  const needsEnrichment = hasEquations && !cand0HasEquations;
+
+  if (candidates[0].psi >= directThreshold && !isIdentityQuestion(question) && !needsEnrichment) {
     opts.onStepProgress?.("verifying", "إجراء فحص التحقق الذاتي على إجابة الإجماع المباشر...");
     const verification = opts.skipVerification
       ? undefined
@@ -304,29 +336,20 @@ export async function fuseResponses(
     };
   }
 
-  // Case 2: everyone disagrees roughly equally — don't fake confidence,
-  // surface the top two so the user (or caller UI) can see the split.
-  if (spread <= uncertainSpread) {
-    return {
-      mode: "uncertain",
-      finalText: candidates[0].text,
-      secondText: candidates[1]?.text,
-      candidates,
-      domain,
-      embeddingSource: source,
-      telemetry: fullTelemetry,
-    };
-  }
-
-  // Case 3: moderate disagreement — fuse the top candidates.
+  // Master Integrative Deduction:
+  // Instead of abandoning the user in "uncertainty mode" where servers seem to fight,
+  // Omega acts as the supreme master intellect: evaluating all servers, deducing the truth,
+  // reconciling differences, and producing the unified, authoritative master answer.
   const finalText = await aggregate(question, candidates, opts);
-  opts.onStepProgress?.("verifying", "إجراء فحص التحقق الذاتي على الإجابة المندمجة...");
+  opts.onStepProgress?.("verifying", "إجراء فحص التحقق الذاتي على الإجابة الاستنتاجية التكاملية...");
   const verification = opts.skipVerification
     ? undefined
     : await verifyAnswer(question, finalText, opts.verifierModel ?? opts.aggregatorModel, opts.keys);
+
   return {
     mode: "aggregated",
     finalText,
+    secondText: candidates[1]?.text,
     candidates,
     domain,
     embeddingSource: source,

@@ -22,6 +22,9 @@ import {
   FileText,
   Image as ImageIcon,
   ExternalLink,
+  CheckCircle2,
+  Copy,
+  Check,
 } from "lucide-react";
 import type { ChatMessage, ChatAttachment } from "../../lib/omega/types";
 import { fuseResponses, type FusionResult } from "../../lib/omega/fusion";
@@ -108,6 +111,51 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [currentStep, setCurrentStep] = useState<string>("");
   const [expandedCandidateId, setExpandedCandidateId] = useState<string | null>(null);
   const [savedMemorySuccess, setSavedMemorySuccess] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const copyToClipboard = async (text: string, id: string) => {
+    if (!text) return;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        textArea.style.top = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+      }
+      setCopiedId(id);
+      setTimeout(() => {
+        setCopiedId((prev) => (prev === id ? null : prev));
+      }, 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+      try {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        textArea.style.top = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+        setCopiedId(id);
+        setTimeout(() => {
+          setCopiedId((prev) => (prev === id ? null : prev));
+        }, 2000);
+      } catch (e) {
+        console.error("Fallback copy failed:", e);
+      }
+    }
+  };
 
   // Capability Modal State
   const [isCapabilityModalOpen, setIsCapabilityModalOpen] = useState(false);
@@ -303,45 +351,65 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       <SignalMeter isProcessing={true} stepDetails={currentStep} />
                     </div>
                   ) : (
-                    <>
-                      {/* If mode is UNCERTAIN, show clear split between Candidate 1 and Candidate 2 */}
-                      {msg.fusionResult?.mode === "uncertain" && msg.fusionResult.secondText ? (
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-2 p-2.5 rounded-lg bg-amber-950/40 border border-amber-500/30 text-amber-300 text-xs font-semibold">
-                            <AlertTriangle className="w-4 h-4 shrink-0" />
-                            <span>
-                              وضع عدم اليقين الدلالي: لم تتجاوز النماذج فارق الحسم (Spread ≤ {config.uncertainSpread}). يعرض النظام الرأيين المتصدرين بشفافية:
-                            </span>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div className="p-3 rounded-xl bg-slate-950/60 border border-amber-500/30">
-                              <div className="flex items-center justify-between text-xs font-mono text-amber-400 mb-1.5 pb-1 border-b border-slate-800">
-                                <span className="font-bold">الخيار الأول (المرشح 1)</span>
-                                <span>Ψ = {msg.fusionResult.candidates[0]?.psi.toFixed(2)}</span>
-                              </div>
-                              <div className="text-xs text-slate-200 leading-relaxed">
-                                <MathRenderer content={msg.fusionResult.finalText} />
-                              </div>
-                            </div>
-
-                            <div className="p-3 rounded-xl bg-slate-950/60 border border-cyan-500/30">
-                              <div className="flex items-center justify-between text-xs font-mono text-cyan-400 mb-1.5 pb-1 border-b border-slate-800">
-                                <span className="font-bold">الخيار الثاني (المرشح 2)</span>
-                                <span>Ψ = {msg.fusionResult.candidates[1]?.psi.toFixed(2)}</span>
-                              </div>
-                              <div className="text-xs text-slate-200 leading-relaxed">
-                                <MathRenderer content={msg.fusionResult.secondText} />
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <MathRenderer content={msg.content} />
-                      )}
-                    </>
+                    <MathRenderer content={msg.content} />
                   )}
                 </div>
+
+                {/* Assistant Actions Bar: Copy Answer */}
+                {msg.role === "assistant" && !msg.isFusing && (
+                  <div className="flex items-center gap-2 pt-1 px-1">
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(msg.content, msg.id)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer border shadow-sm ${
+                        copiedId === msg.id
+                          ? "bg-emerald-950/90 border-emerald-500/60 text-emerald-300 shadow-emerald-900/30"
+                          : "bg-slate-900/80 border-slate-800 text-slate-400 hover:text-cyan-300 hover:bg-slate-800/90 hover:border-slate-700"
+                      }`}
+                      title="نسخ الإجابة كاملة"
+                    >
+                      {copiedId === msg.id ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>تم نسخ الإجابة بنجاح!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>نسخ الإجابة</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {/* User Actions Bar: Copy Query */}
+                {msg.role === "user" && (
+                  <div className="flex justify-end pt-0.5 px-1">
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(msg.content, msg.id)}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition-all cursor-pointer ${
+                        copiedId === msg.id
+                          ? "text-emerald-300 font-medium"
+                          : "text-purple-300/60 hover:text-purple-200"
+                      }`}
+                      title="نسخ السؤال"
+                    >
+                      {copiedId === msg.id ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-400" />
+                          <span>تم النسخ</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          <span>نسخ</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
 
                 {/* If Assistant response has FusionResult Telemetry */}
                 {msg.fusionResult && !msg.isFusing && (
@@ -360,8 +428,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
                         className="w-full flex items-center justify-between px-3 py-2 text-slate-400 hover:text-slate-200 hover:bg-slate-900/50 transition-colors cursor-pointer"
                       >
                         <span className="flex items-center gap-1.5 font-medium">
-                          <Layers className="w-3.5 h-3.5 text-purple-400" />
-                          تفاصيل توافق المرشحين ({msg.fusionResult.candidates.length} نماذج) وحسابات التشتت
+                          <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                          المساهمات التكاملية للخوادم ({msg.fusionResult.candidates.length} خوادم تآزرية) وتفاصيل الاستنتاج
                         </span>
                         {expandedCandidateId === msg.id ? (
                           <ChevronUp className="w-4 h-4" />
@@ -372,6 +440,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
                       {expandedCandidateId === msg.id && (
                         <div className="p-3 border-t border-slate-800/60 space-y-2.5 bg-slate-950/80">
+                          <div className="flex items-center gap-2 p-2 rounded-lg bg-indigo-950/40 border border-indigo-500/30 text-indigo-300 text-[11px]">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                            <span>
+                              <strong>ميثاق التكامل لأوميغا:</strong> تعمل هذه الخوادم بتناغم تام كفريق استشاري تخصصي، حيث يقوم أوميغا كالعقل الإنساني الحصيف باستنتاج الإجابة القطعية الشاملة دون أي صراع بين النماذج.
+                            </span>
+                          </div>
+
                           {msg.fusionResult.candidates.map((cand, idx) => {
                             const spec = OMEGA_MODELS[cand.modelId];
                             return (
@@ -400,6 +475,33 @@ export const ChatView: React.FC<ChatViewProps> = ({
                                         انحراف Δ: {cand.delta.toFixed(3)}
                                       </span>
                                     )}
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        copyToClipboard(
+                                          cand.text,
+                                          `cand-${cand.modelId}-${idx}`
+                                        )
+                                      }
+                                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] transition-all cursor-pointer border ${
+                                        copiedId === `cand-${cand.modelId}-${idx}`
+                                          ? "bg-emerald-950/70 border-emerald-500/50 text-emerald-300"
+                                          : "bg-slate-800/60 border-slate-700/60 text-slate-400 hover:text-cyan-300 hover:bg-slate-800"
+                                      }`}
+                                      title="نسخ مساهمة هذا الخادم"
+                                    >
+                                      {copiedId === `cand-${cand.modelId}-${idx}` ? (
+                                        <>
+                                          <Check className="w-3 h-3 text-emerald-400" />
+                                          <span>تم النسخ</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Copy className="w-3 h-3" />
+                                          <span>نسخ المساهمة</span>
+                                        </>
+                                      )}
+                                    </button>
                                   </div>
                                 </div>
                                 <div className="text-slate-300 text-[11px] leading-relaxed">

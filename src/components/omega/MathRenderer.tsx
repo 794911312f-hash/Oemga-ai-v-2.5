@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import katex from "katex";
+import { Copy, Check } from "lucide-react";
 
 interface MathRendererProps {
   content: string;
@@ -17,7 +18,34 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
   content,
   className = "",
 }) => {
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+
   if (!content) return null;
+
+  const handleCopyCode = async (codeText: string, index: number) => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(codeText);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = codeText;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        textArea.style.top = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+      }
+      setCopiedIndex(index);
+      setTimeout(() => {
+        setCopiedIndex((prev) => (prev === index ? null : prev));
+      }, 2000);
+    } catch (e) {
+      console.error("Failed to copy code snippet:", e);
+    }
+  };
 
   // Function to render math string via KaTeX safely
   const renderKatex = (math: string, displayMode: boolean): string => {
@@ -50,12 +78,27 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
             className="my-3 rounded-xl overflow-hidden border border-slate-800 bg-slate-950 font-mono text-xs"
             dir="ltr"
           >
-            {lang && (
-              <div className="bg-slate-900/80 px-3 py-1.5 text-[11px] text-slate-400 border-b border-slate-800/80 flex items-center justify-between">
-                <span>{lang}</span>
-                <span className="text-slate-500 text-[10px]">كود المصدر</span>
-              </div>
-            )}
+            <div className="bg-slate-900/90 px-3 py-1.5 text-[11px] text-slate-400 border-b border-slate-800/80 flex items-center justify-between">
+              <span className="font-semibold text-slate-300">{lang || "code"}</span>
+              <button
+                type="button"
+                onClick={() => handleCopyCode(code, index)}
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-sans font-medium text-slate-400 hover:text-cyan-300 hover:bg-slate-800 transition-colors cursor-pointer"
+                title="نسخ الكود"
+              >
+                {copiedIndex === index ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="text-emerald-400">تم النسخ</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>نسخ الكود</span>
+                  </>
+                )}
+              </button>
+            </div>
             <pre className="p-3 overflow-x-auto text-slate-200 leading-relaxed font-mono">
               <code>{code}</code>
             </pre>
