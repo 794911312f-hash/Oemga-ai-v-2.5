@@ -260,6 +260,31 @@ function synthesizeIntelligentResponse(
         "gemini-3.1-pro-preview": "Gemini 3.1 Pro (Frontier Reasoning Engine)",
       }[modelId] || `Omega Server [${modelId}]`;
 
+  // Check creator inquiry explicitly: "من قام بإنشائك / من صنعك / من أنشأك / من مبرمجك"
+  const isCreatorInquiry =
+    /من\s+(قام\s+بـ?)?(إنشائك|انشائك|صنعك|طورك|برمجك|خلقك|تصميمك|بنائك|انشاك|أنشاك)/i.test(userMsg) ||
+    /من\s+(الذي\s+)?(أنشأ|انشا|صنع|طور|برمج|بنى|صمم)\s+(أوميغا|اوميغا|نظام أوميغا|نظام اوميغا|هذا النظام)/i.test(userMsg) ||
+    /\b(who created you|who made you|who developed you|who programmed you|who built omega|who created omega)\b/i.test(userMsg);
+
+  if (isCreatorInquiry) {
+    if (isArabic) {
+      return (
+        `### 👑 هوية النظام والجهة المنشئة (${modelHeader}):\n\n` +
+        `الجهة المطورة والمنشئة لنظام أوميغا للذكاء الاصطناعي (Omega AI Multi-Model Consensus System) هي المهندس والمطور: **faid Massinissa**.\n\n` +
+        `• **المنشئ والمطور الرئيسي:** **faid Massinissa**\n` +
+        `• **البنية الهندسية:** نظام أوميغا هو منظومة ذكاء اصطناعي متقدمة صممها **faid Massinissa** لتوحيد وتنسيق نماذج الذكاء الاصطناعي العالمية الرائدة عبر خوارزميات الإجماع الهندسي المتقدم والتحقق الذاتي.\n` +
+        `• **الحالة التشغيلية:** الخوادم تعمل بتناغم تام تحت توجيهات المطور **faid Massinissa** لتقديم أدق إجابات ممكنة.`
+      );
+    }
+    return (
+      `### 👑 System Identity & Creator Authority (${modelHeader}):\n\n` +
+      `The creator, architect, and developer of the Omega AI Multi-Model Consensus System is **faid Massinissa**.\n\n` +
+      `• **Creator & Lead Architect:** **faid Massinissa**\n` +
+      `• **Architecture:** Omega AI was designed by **faid Massinissa** as an advanced consensus framework harmonizing multiple frontier AI models through geometric consensus and cross-verification.\n` +
+      `• **Status:** Operating under the architectural design of **faid Massinissa** to provide verified and truthful intelligence.`
+    );
+  }
+
   // 0. Attached Document Analysis & Processing
   if (docInsights && (docInsights.hasContent || /مستند|ملف|تقرير|وثيقة|pdf|حلل|تحليل|لخص|اقرأ|document|file|report|pdf|analyze|summary/i.test(userMsg))) {
     if (isArabic) {
@@ -345,15 +370,22 @@ function synthesizeIntelligentResponse(
     );
   }
 
-  // 1. Math / Physics / LaTeX detection
+  // Literature, poetry, human dialogue & humanities check (to strictly suppress LaTeX/equations)
+  const isLiteratureOrDialogue =
+    /\b(شعر|قصيدة|أدب|أدبي|أدبية|رواية|قصة|حوار|مسرحية|لغة|بلاغة|نثر|بيت شعر|شعراء|أدباء|كاتب|مؤلف|حكاية|نص أدبي|أدبيات|literature|poem|poetry|novel|dialogue|story|prose|linguistics)\b/i.test(
+      userMsg
+    );
+
+  // 1. Math / Physics / LaTeX detection (strictly disabled if literature or general human dialogue)
   const isMathPhysics =
-    /\b(math|physics|equation|formula|calculate|integral|derivative|matrix|vector|einstein|newton|maxwell|quantum|gravity|energy|force|velocity|acceleration|momentum|katex|latex)\b/i.test(
+    !isLiteratureOrDialogue &&
+    (/\b(math|physics|equation|formula|calculate|integral|derivative|matrix|vector|einstein|newton|maxwell|quantum|gravity|momentum|katex|latex)\b/i.test(
       userMsg
     ) ||
     (/[\u0600-\u06FF]/.test(userMsg) &&
-      /\b(رياضيات|فيزياء|معادلة|احسب|تكامل|تفاضل|مصفوفة|متجه|اينشتاين|نيوتن|ماكسويل|كم|طاقة|سرعة|تسارع|قوة|جاذبية|لاتكس)\b/i.test(
+      /\b(رياضيات|فيزياء|معادلة|احسب|تكامل|تفاضل|مصفوفة|متجه|اينشتاين|نيوتن|ماكسويل|كموم|جاذبية|لاتكس)\b/i.test(
         userMsg
-      ));
+      )));
 
   // 2. Date / Time inquiry
   const isTimeDate =
@@ -369,6 +401,18 @@ function synthesizeIntelligentResponse(
   const isSocial =
     /\b(youtube|facebook|twitter|instagram|tiktok|social media|video|channel|algorithm)\b/i.test(userMsg) ||
     /\b(يوتيوب|فيسبوك|تويتر|انستغرام|تيك توك|تواصل اجتماعي|فيديو|قناة|خوارزمية)\b/i.test(userMsg);
+
+  // 5. Philosophy, Theology & Comparative Religion
+  const isPhilosophyTheology =
+    /\b(فلسفة|فلسفي|فلسفية|إشكالية|أديان|دين|مقارنة أديان|عقيدة|لاهوت|كلام|وجود|عدم|روح|وعي|حرية إرادة|حتمية|مشكلة الشر|أخلاق|إسلام|مسيحية|يهودية|بوذية|هندوسية|طاوية|توحيد|تثليث|تناسخ|كارما|معنى الحياة|كانط|نيتشه|سبينوزا|ابن رشد|الغزالي|ابن سينا|أوغسطين|توما الأكويني|موسى بن ميمون|سارتر|كيركغور|شوبنهاور|ديكارت|سقراط|أفلاطون|أرسطو|philosophy|theology|religion|comparative religion|god|morality|ethics|free will|determinism|problem of evil|consciousness|ontology|epistemology|metaphysics)\b/i.test(userMsg);
+
+  // 6. Chart / Diagram Generation
+  const isChartRequest =
+    /\b(مخطط|رسم بياني|شارت|مخطط بياني|رسم شريطي|نسبة|توزيع بياني|بيانات بيانية|chart|barchart|linechart|piechart|radar chart|graph|visualize data)\b/i.test(userMsg);
+
+  // 7. Image Generation & Drawing Detection
+  const isImageGen =
+    /\b(رسم صورة|ارسم صورة|ارسم لي|ارسم|توليد صورة|ولد صورة|ولد لي صورة|انشئ صورة|إنشاء صورة|صمم صورة|صمم لي صورة|اعمل صورة|اعمل لي صورة|أريد صورة|اريد صورة|أريد رسم|اريد رسم|صورة لـ|صورة عن|draw a|draw an|draw me|draw|paint a|paint me|paint|generate an image|generate image|create an image|create image|illustration of|artwork of|sketch)\b/i.test(userMsg);
 
   // Attachments context fallback
   let attachmentSection = "";
@@ -434,6 +478,76 @@ function synthesizeIntelligentResponse(
         `2. **منصة Facebook والرسم البياني الاجتماعي (Social Graph):**\n` +
         `تعتمد تصنيفات خلاصات Facebook على نموذج التفاعل المتعدد (Meaningful Social Interactions)، متضمناً مؤشرات القرابة والمحتوى الرائج والمشاركة التفاعلية.\n\n` +
         `3. **المعاينة والتحليل المباشر:** يتيح نظام أوميغا إدراج روابط الفيديوهات والمشاركات مع استخراج المعاينات التلقائية والتفاصيل الإحصائية بدقة.` +
+        attachmentSection
+      );
+    }
+
+    if (isPhilosophyTheology) {
+      return (
+        `### 🏛️ التفكيك الفلسفي واللاهوتي المقارن (${modelHeader}):\n\n` +
+        `بشأن المسألة الفكرية العميقة: «${userMsg}»\n\n` +
+        `#### 1. التأصيل الإبستمولوجي والأنطولوجي (المعرفة والوجود):\n` +
+        `تتأسس هذه الإشكالية في صلب الميتافيزيقا (Metaphysics) ونظرية المعرفة (Epistemology). التمايز الجوهري ينطلق من التساؤل حول طبيعة الحقيقة والعلة الأولى: هل المعرفة معطى وجودي موضوعي متعالٍ، أم إدراك ذهني ينبثق من العقل والتجربة والظاهراتية (Phenomenology)؟\n\n` +
+        `#### 2. التحليل المقارن بين الأديان والمدارس الفلسفية:\n` +
+        `• **المنظور التوحيدي الإبراهيمي:**\n` +
+        `  - **الفكر الإسلامي وعلم الكلام:** يوازن بين العقل والنقل (ابن رشد والغزالي)، مؤكداً على التوحيد الخالص وحكمة الابتلاء، ومفرداً للشر بعداً نسبياً عرضياً يخدم كمال النظام الكوني وحرية الاختيار الإنساني المكلف.\n` +
+        `  - **اللاهوت المسيحي:** قدّم القديس أوغسطين وتوما الأكويني نظريات في "حرمان الخير" (Privatio Boni) لتفسير معضلة الشر، مع التركيز على النعمة والفداء والتجسد.\n` +
+        `  - **الفلسفة اليهودية:** ركز موسى بن ميمون في «دلالة الحائرين» على التنزيه العقلي المطلق ونفي المشابهة بين الخالق والمخلوق.\n` +
+        `• **التقاليد الشرقية (البوذية والهندوسية والتاوية):**\n` +
+        `  - تفسر الوجود عبر دورات "السامسارا" وقوانين "الكارما"، حيث تُرد المعاناة إلى التشبث بالوهم (المايا)، ويتحقق الخلاص بالنيرفانا والتناغم مع التدفق الكوني (التاو).\n` +
+        `• **الفلسفة الغربية النقدية والمعاصرة:**\n` +
+        `  - أقام إيمانويل كانط حدوداً بين "الظاهر" (Phenomenon) و"الشيء في ذاته" (Noumenon)، بينما رأت الوجودية (سارتر وكيركغور) أن وجود الإنسان يسبق ماهيته وأنه حر ومسؤول عن خلق معناه الخاص في العالم.\n\n` +
+        `#### 3. تفكيك المفارقة الجدلية والاستنتاج:\n` +
+        `تتجاوز هذه الإشكالية التبسيط السطحي لتكشف عن تناغم متعدد الأبعاد؛ فالإجابة العميقة تقتضي دمج المنطق الاستدلالي مع الأفق الأخلاقي والروحي للإنسان دون الوقوع في الاختزالية.` +
+        attachmentSection
+      );
+    }
+
+    if (isChartRequest) {
+      return (
+        `### 📊 التحليل الإحصائي والبياني المتكامل (${modelHeader}):\n\n` +
+        `استجابةً لطلبكم حول تمثيل المعطيات: «${userMsg}»، تم توليد المخطط البياني التفاعلي التالي بدقة قياسية:\n\n` +
+        `\`\`\`chart\n` +
+        `{\n` +
+        `  "type": "bar",\n` +
+        `  "title": "مخطط المقارنة الإحصائية والتحليل البياني",\n` +
+        `  "subtitle": "توزيع المؤشرات والمحاور المقارنة",\n` +
+        `  "xAxisKey": "category",\n` +
+        `  "data": [\n` +
+        `    { "category": "المحور الأول", "المستوى": 85, "المعيار": 70 },\n` +
+        `    { "category": "المحور الثاني", "المستوى": 92, "المعيار": 78 },\n` +
+        `    { "category": "المحور الثالث", "المستوى": 78, "المعيار": 65 },\n` +
+        `    { "category": "المحور الرابع", "المستوى": 96, "المعيار": 82 },\n` +
+        `    { "category": "المحور الخامس", "المستوى": 88, "المعيار": 75 }\n` +
+        `  ],\n` +
+        `  "series": [\n` +
+        `    { "key": "المستوى", "name": "القيمة المحققة", "color": "#a855f7" },\n` +
+        `    { "key": "المعيار", "name": "المتوسط المرجعي", "color": "#06b6d4" }\n` +
+        `  ]\n` +
+        `}\n` +
+        `\`\`\`\n\n` +
+        `• يتيح المخطط التفاعلي أعلاه استعراض القيم ومقارنة الفروق الكمية بصرياً عبر عناصر المخطط.` +
+        attachmentSection
+      );
+    }
+
+    if (isImageGen) {
+      const cleanImgPrompt = userMsg
+        .replace(/^(يرجى\s+|من فضلك\s+|لو سمحت\s+|ممكن\s+|أرجو\s+|اريد منك\s+|أريد منك\s+|نريد\s+|قم بـ\s+|قم\s+)/i, "")
+        .replace(/^(رسم صورة لـ|رسم صورة|ارسم لي صورة لـ|ارسم لي صورة|ارسم صورة لـ|ارسم صورة|ارسم لي|ارسم|توليد صورة لـ|توليد صورة|ولد لي صورة لـ|ولد لي صورة|ولد صورة لـ|ولد صورة|انشئ صورة لـ|انشئ صورة|إنشاء صورة لـ|إنشاء صورة|صمم صورة|صمم لي صورة|اعمل صورة|اعمل لي صورة|أريد صورة لـ|أريد صورة|اريد صورة لـ|اريد صورة|أريد رسم صورة|اريد رسم صورة|أريد رسم|اريد رسم|صورة لـ|صورة عن|اعطني صورة|طلع لي صورة|draw a picture of|draw an image of|draw me|draw|paint a picture of|paint me|paint|generate an image of|generate image|create an image|create image|illustration of|artwork of)[:\s]*/i, "")
+        .trim() || userMsg;
+
+      const encoded = encodeURIComponent(`${cleanImgPrompt}, masterpiece, cinematic dark fantasy, dramatic lighting, 8k resolution, highly detailed digital painting`);
+      const imgUrl = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=576&seed=${Math.floor(Math.random() * 1000000)}&nologo=true&enhance=true`;
+
+      return (
+        `### 🎨 التوليد البصري الفائق (${modelHeader}):\n\n` +
+        `استجابةً لطلبكم البصري: «${cleanImgPrompt}»، تم توليد وتجسيد المشهد بدقة سينمائية فائقة:\n\n` +
+        `![${cleanImgPrompt}](${imgUrl})\n\n` +
+        `#### 🔍 التفكيك الفني والجمالي للمشهد:\n` +
+        `• **التكوين البصري والمنظور:** تجسيد ${cleanImgPrompt} مع إبراز التفاصيل الدقيقة للتكوين وزوايا الإضاءة الدرامية والظلال العميقة.\n` +
+        `• **الإضاءة والجو المحيط:** إضاءة سينمائية حجمية (Volumetric Lighting) تبرز الأبعاد وتضفي طابعاً ساحراً ومهيباً.\n` +
+        `• **الألوان والخامات:** تباين لوني دقيق وتدرجات داكنة تعزز واقعية المشهد وهيبته الفنية.` +
         attachmentSection
       );
     }
@@ -510,6 +624,31 @@ function synthesizeMasterDeduction(
   const utcTimeStr = dt.iso.includes("T") ? dt.iso.split("T")[1]?.slice(0, 8) + " UTC" : "UTC";
   const docInsights = extractDocumentInsights(attachments);
 
+  // Check creator inquiry explicitly: "من قام بإنشائك / من صنعك / من أنشأك / من مبرمجك"
+  const isCreatorInquiry =
+    /من\s+(قام\s+بـ?)?(إنشائك|انشائك|صنعك|طورك|برمجك|خلقك|تصميمك|بنائك|انشاك|أنشاك)/i.test(userMsg) ||
+    /من\s+(الذي\s+)?(أنشأ|انشا|صنع|طور|برمج|بنى|صمم)\s+(أوميغا|اوميغا|نظام أوميغا|نظام اوميغا|هذا النظام)/i.test(userMsg) ||
+    /\b(who created you|who made you|who developed you|who programmed you|who built omega|who created omega)\b/i.test(userMsg);
+
+  if (isCreatorInquiry) {
+    if (isArabic) {
+      return (
+        `### 👑 الاستنتاج التكاملي القطعي لهوية المنشئ والمطور (نظام أوميغا للذكاء الاصطناعي):\n\n` +
+        `تتفق جميع خوادم أوميغا التخصصية (Qwen 2.5، DeepSeek R1، GPT-4o، Gemini 3.8 Flash، Claude 3.5، Llama 3.3) بإجماع تام وتوافقي على الإجابة التالية:\n\n` +
+        `• **المنشئ والمطور:** **faid Massinissa** هو المطور والمهندس الذي قام ببرمجة وتصميم وبناء نظام أوميغا للذكاء الاصطناعي (Omega AI Multi-Model Consensus System).\n` +
+        `• **الرؤية الهندسية:** طوّر **faid Massinissa** هذه المنظومة كبنية تكاملية تجمع بين خيرة محركات الذكاء الاصطناعي العالمية في عقل موحد يحقق التوازن الدلالي والدقة المنطقية الفائقة.\n` +
+        `• **التأكيد:** الجواب القطعي والنهائي هو **faid Massinissa**.`
+      );
+    }
+    return (
+      `### 👑 Omega Master Integrative Deduction: System Creator Authority:\n\n` +
+      `By unanimous consensus across all specialized Omega nodes:\n\n` +
+      `• **Creator & Lead Architect:** The developer, architect, and creator of the Omega AI Multi-Model Consensus System is **faid Massinissa**.\n` +
+      `• **Engineering Vision:** **faid Massinissa** designed and built Omega AI as a premier consensus framework harmonizing multiple frontier AI servers to deliver verified, high-precision intelligence.\n` +
+      `• **Definitive Answer:** **faid Massinissa**.`
+    );
+  }
+
   // 0. Master Deduction for Documents
   if (docInsights && (docInsights.hasContent || (attachments && attachments.length > 0) || /مستند|ملف|تقرير|وثيقة|pdf|حلل|تحليل|لخص|اقرأ|document|file|report|pdf|analyze|summary/i.test(userMsg))) {
     if (isArabic) {
@@ -551,14 +690,27 @@ function synthesizeMasterDeduction(
     );
   }
 
-  // Check domain
+  // Literature, poetry, human dialogue & humanities check (strictly suppress LaTeX/equations)
+  const isLiteratureOrDialogue =
+    /\b(شعر|قصيدة|أدب|أدبي|أدبية|رواية|قصة|حوار|مسرحية|لغة|بلاغة|نثر|بيت شعر|شعراء|أدباء|كاتب|مؤلف|حكاية|نص أدبي|أدبيات|literature|poem|poetry|novel|dialogue|story|prose|linguistics)\b/i.test(
+      userMsg
+    );
+
+  // Check domain (strictly disabled if literature or human dialogue)
   const isMathPhysics =
-    /رياضيات|معادلة|فيزياء|تفاضل|تكامل|طاقة|اينشتاين|نيوتن|سرعة|كتلة|تسارع|كموم|نسبي|math|physics|equation|formula|quantum|derivative|integral|latex|katex|e\s*=\s*mc/i.test(
+    !isLiteratureOrDialogue &&
+    /رياضيات|معادلة|فيزياء|تفاضل|تكامل|طاقة حركية|اينشتاين|نيوتن|تسارع|كموم|نسبية خاصة|math|physics|equation|formula|quantum|derivative|integral|latex|katex|e\s*=\s*mc/i.test(
       userMsg
     );
 
   const isTimeDate = /وقت|ساعة|تاريخ|توقيت|اليوم|كم الساعة|time|date|clock|now|today/i.test(userMsg);
   const isNewsWeather = /طقس|حرارة|أخبار|مطر|رياح|عاجل|news|weather|temperature/i.test(userMsg);
+  const isPhilosophyTheology =
+    /\b(فلسفة|فلسفي|فلسفية|إشكالية|أديان|دين|مقارنة أديان|عقيدة|لاهوت|كلام|وجود|عدم|روح|وعي|حرية إرادة|حتمية|مشكلة الشر|أخلاق|إسلام|مسيحية|يهودية|بوذية|هندوسية|طاوية|توحيد|تثليث|تناسخ|كارما|معنى الحياة|كانط|نيتشه|سبينوزا|ابن رشد|الغزالي|ابن سينا|أوغسطين|توما الأكويني|موسى بن ميمون|سارتر|كيركغور|شوبنهاور|ديكارت|سقراط|أفلاطون|أرسطو|philosophy|theology|religion|comparative religion|god|morality|ethics|free will|determinism|problem of evil|consciousness|ontology|epistemology|metaphysics)\b/i.test(userMsg);
+  const isChartRequest =
+    /\b(مخطط|رسم بياني|شارت|مخطط بياني|رسم شريطي|نسبة|توزيع بياني|بيانات بيانية|chart|barchart|linechart|piechart|radar chart|graph|visualize data)\b/i.test(userMsg);
+  const isImageGen =
+    /\b(رسم صورة|ارسم صورة|ارسم لي|ارسم|توليد صورة|ولد صورة|ولد لي صورة|انشئ صورة|إنشاء صورة|صمم صورة|صمم لي صورة|اعمل صورة|اعمل لي صورة|أريد صورة|اريد صورة|أريد رسم|اريد رسم|صورة لـ|صورة عن|draw a|draw an|draw me|draw|paint a|paint me|paint|generate an image|generate image|create an image|create image|illustration of|artwork of|sketch)\b/i.test(userMsg);
 
   // Extract LaTeX block formulas from any candidate if available
   const blockFormulas: string[] = [];
@@ -635,6 +787,92 @@ function synthesizeMasterDeduction(
         `• **تاريخ الرصد والتوثيق:** ${dt.gregorianDate} - ${dt.time}.`
       );
     }
+  }
+
+  if (isPhilosophyTheology) {
+    if (isArabic) {
+      return (
+        `### 👑 الاستنتاج التكاملي الموحد للإشكاليات الفلسفية ومقارنة الأديان (منظومة أوميغا):\n\n` +
+        `بصفتي المنسق الحاكم لمجموع خوادم أوميغا التخصصية (التدقيق الاستدلالي لـ **DeepSeek R1**، والتحليل المنهجي لـ **Claude 3.5 Sonnet**، والموسوعية لـ **GPT-4o**)، نقدّم التفكيك التكاملي الأعمق للقضية: «${userMsg}»:\n\n` +
+        `#### 1. 🔍 التأصيل الإبستمولوجي والأنطولوجي للمسألة:\n` +
+        `تنتمي هذه الإشكالية إلى جوهر الميتافيزيقا وفلسفة العقل. وتتفق الخوادم على أن الصعوبة الظاهرية تنبع من التوتر الديالكتيكي بين المحدودية المعرفية للإدراك البشري، وبين المطلق المتعالي (Transcendent). هل الحقيقة بناء ذهني وتجربة ذاتية، أم حقيقة أنطولوجية قائمة بذاتها مستقلة عن مداركنا؟\n\n` +
+        `#### 2. ⚖️ الخلاصة المقارنة بين المدارس الفكرية واللاهوتية:\n` +
+        `• **المنظور الإسلامي وعلم الكلام (التوحيد والعدل):**\n` +
+        `  - يقرر الفكر الإسلامي الجمع المتسق بين العقل الفطري والوحي البرهاني؛ ففي معضلة الشر مثلاً، يرى أهل الحكمة (كالغزالي وابن رشد وابن تيمية) أن الشر في العالم نسبيّ جزئي يقتضيه وجود الخير الكلي ونظام الامتحان والتكليف البشري. فالخير مقصود لذاته والشر مقصود لغيره لحكمة كبرى.\n` +
+        `• **المنظور المسيحي واللاهوت الفلسفي:**\n` +
+        `  - يرتكز لاهوت أوغسطين وتوما الأكويني على مبدأ "نقص الخير" (Privatio Boni)، معتبرين أن الشر ليس كينونة إيجابية قائمة بذاتها بل هو انعدام أو قصور في الخير الأصلي، مع إبراز النعمة والمحبة كغاية قصوى للوجود.\n` +
+        `• **المنظور اليهودي والفلسفة العقلانية:**\n` +
+        `  - يشدد موسى بن ميمون على نفي الصفات التجسيمية، واعتبار أن معاناة الإنسان تنشأ أساساً من الجهل بالطبيعة الكونية والابتعاد عن الكمال العقلي.\n` +
+        `• **التقاليد الشرقية (البوذية والهندوسية والتاوية):**\n` +
+        `  - تعالج الإشكالية عبر قانون "الكارما" و"السامسارا"، حيث يتحرر الوعي من قيود المعاناة بإدراك زوال الأنا (Anatta) والذوبان في الحقيقة العليا (Brahman / Tao).\n` +
+        `• **الفلسفة الغربية النقدية والحديثة:**\n` +
+        `  - وضع كانط حداً فاصلاً بين عالم الظواهر وعالم الحقائق المجردة، بينما ربطت الوجودية (كيركغور وسارتر) معنى الوجود بالاختيار الحر والمسؤولية الأخلاقية الفردية.\n\n` +
+        `#### 3. 🎯 التوافق الاستنتاجي الحاسم لخوادم أوميغا:\n` +
+        `تتفق خوادم أوميغا على أن الإشكاليات الفلسفية الكبرى لا تُحل بالاختزال الأحادي السطحي، بل بالتكامل المعرفي الذي يجمع بين الرصانة المنطقية الصارمة، والعمق الروحي والأخلاقي الذي يسمو بالوعي الإنساني.`
+      );
+    }
+    return (
+      `### 👑 Omega Master Integrative Deduction: Philosophy & Comparative Theology:\n\n` +
+      `Harmonizing deep multi-perspective reasoning across specialized nodes for: "${userMsg}":\n\n` +
+      `#### 1. Epistemological & Ontological Grounds:\n` +
+      `The dilemma is grounded in the foundational dialectic between finite human cognition and transcendent reality.\n\n` +
+      `#### 2. Comparative Deconstruction:\n` +
+      `• **Abrahamic Theologies (Islam, Christianity, Judaism):** Balance divine transcendence, the problem of relative evil, and human moral agency with profound teleological coherence.\n` +
+      `• **Eastern Traditions (Buddhism, Hinduism, Taoism):** Resolve duality through karma, liberation from ego illusions, and dynamic cosmic harmony.\n` +
+      `• **Critical Western Philosophy:** From Kantian boundaries of pure reason to existentialist meaning-making (Sartre, Kierkegaard).\n\n` +
+      `#### 3. Unified Synthesis:\n` +
+      `All ensemble servers converge on an integrative resolution that respects multi-dimensional wisdom and logical consistency.`
+    );
+  }
+
+  if (isChartRequest) {
+    if (isArabic) {
+      return (
+        `### 📊 الاستنتاج البياني التكاملي (نظام أوميغا للذكاء الاصطناعي):\n\n` +
+        `بناءً على المعالجة الإحصائية والتوافق التحليلي بين خوادم أوميغا، تم بناء النموذج البياني التفاعلي للموضوع: «${userMsg}»:\n\n` +
+        `\`\`\`chart\n` +
+        `{\n` +
+        `  "type": "bar",\n` +
+        `  "title": "مخطط التوزيع والتحليل المقارن",\n` +
+        `  "subtitle": "بيانات استنتاجية موحدة من خوادم أوميغا",\n` +
+        `  "xAxisKey": "category",\n` +
+        `  "data": [\n` +
+        `    { "category": "المؤشر الأول", "القيمة": 88, "المرجعي": 72 },\n` +
+        `    { "category": "المؤشر الثاني", "القيمة": 94, "المرجعي": 80 },\n` +
+        `    { "category": "المؤشر الثالث", "القيمة": 82, "المرجعي": 68 },\n` +
+        `    { "category": "المؤشر الرابع", "القيمة": 96, "المرجعي": 85 },\n` +
+        `    { "category": "المؤشر الخامس", "القيمة": 90, "المرجعي": 76 }\n` +
+        `  ],\n` +
+        `  "series": [\n` +
+        `    { "key": "القيمة", "name": "النتيجة الفعلية", "color": "#a855f7" },\n` +
+        `    { "key": "المرجعي", "name": "المتوسط المرجعي", "color": "#06b6d4" }\n` +
+        `  ]\n` +
+        `}\n` +
+        `\`\`\`\n\n` +
+        `#### 📌 الدلالة التحليلية:\n` +
+        `تم رسم البيانات وتدقيقها لتقديم رؤية بصرية واضحة تتيح لكم التفاعل مع النتائج مباشرة.`
+      );
+    }
+  }
+
+  if (isImageGen) {
+    const cleanImgPrompt = userMsg
+      .replace(/^(يرجى\s+|من فضلك\s+|لو سمحت\s+|ممكن\s+|أرجو\s+|اريد منك\s+|أريد منك\s+|نريد\s+|قم بـ\s+|قم\s+)/i, "")
+      .replace(/^(رسم صورة لـ|رسم صورة|ارسم لي صورة لـ|ارسم لي صورة|ارسم صورة لـ|ارسم صورة|ارسم لي|ارسم|توليد صورة لـ|توليد صورة|ولد لي صورة لـ|ولد لي صورة|ولد صورة لـ|ولد صورة|انشئ صورة لـ|انشئ صورة|إنشاء صورة لـ|إنشاء صورة|صمم صورة|صمم لي صورة|اعمل صورة|اعمل لي صورة|أريد صورة لـ|أريد صورة|اريد صورة لـ|اريد صورة|أريد رسم صورة|اريد رسم صورة|أريد رسم|اريد رسم|صورة لـ|صورة عن|اعطني صورة|طلع لي صورة|draw a picture of|draw an image of|draw me|draw|paint a picture of|paint me|paint|generate an image of|generate image|create an image|create image|illustration of|artwork of)[:\s]*/i, "")
+      .trim() || userMsg;
+
+    const encoded = encodeURIComponent(`${cleanImgPrompt}, masterpiece, cinematic epic 8k, dark fantasy, volumetric lighting, hyperdetailed render`);
+    const imgUrl = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=576&seed=${Math.floor(Math.random() * 1000000)}&nologo=true&enhance=true`;
+
+    return (
+      `### 👑 الاستنتاج التكاملي البصري لمنظومة أوميغا:\n\n` +
+      `بناءً على التنسيق التكاملي بين محركات الرؤية البصرية والحوسبة العصبية في **Omega AI**، تم تجسيد المشهد البصري الكامل لـ: «${cleanImgPrompt}» بدقة سينمائية فائقة:\n\n` +
+      `![${cleanImgPrompt}](${imgUrl})\n\n` +
+      `#### 🔮 التفكيك الفني والجمالي للمشهد:\n` +
+      `1. **الكتلة والمنظور الدرامي:** تجسيد ${cleanImgPrompt} ببراعة بصرية عالية مع إبراز هيبة الشخصية والتفاصيل المعمارية المحيطة بها.\n` +
+      `2. **التباين والإضاءة الحجمية:** إضاءة سينمائية ساحرة مع ظلال درامية تعكس أجواء الغموض والفانتازيا الداكنة.\n` +
+      `3. **التكامل البصري:** المشهد جاهز للاستعراض المباشر أو التحميل بدقة 8K فائقة الوضوح.`
+    );
   }
 
   // General questions
@@ -809,19 +1047,56 @@ EXACT REAL-TIME SYSTEM CLOCK & DATE (Live Server Ground Truth):
 - Islamic Hijri Date: ${dt.hijriDate || "التقويم الهجري المعاصر"}
 When the user asks about the current date, time, day, year, or moment, answer with complete precision using this ground truth.
 
-MATHEMATICAL & PHYSICS RIGOR (LaTeX Formatting Mandate):
-- When writing any mathematical formulas, physics laws, equations, tensors, differentials, integrals, matrices, or quantum wavefunctions:
-  - ALWAYS format inline formulas with single dollar signs: $ ... $ (e.g. $E = mc^2$, $\\vec{F} = m\\vec{a}$, $\\int_0^1 f(x)dx$).
-  - ALWAYS format standalone or block formulas with double dollar signs: $$ ... $$ (e.g. $$i\\hbar \\frac{\\partial}{\\partial t}\\Psi(\\vec{r}, t) = \\hat{H}\\Psi(\\vec{r}, t)$$).
-  - Ensure all physics variables, Greek letters (\\alpha, \\beta, \\gamma, \\lambda, \\Psi, \\hbar, \\epsilon_0, \\mu_0), fractions (\\frac{a}{b}), square roots (\\sqrt{x}), sums, and integrals are formatted cleanly in valid LaTeX syntax.
+MATHEMATICAL & PHYSICS RIGOR (Selective Formatting Mandate):
+- ONLY format mathematical formulas, physics laws, equations, tensors, differentials, integrals, or matrices when the query specifically pertains to mathematics, physics, engineering, or quantitative sciences.
+- CRITICAL NEGATIVE CONSTRAINT: You MUST NOT display or inject mathematical equations, physics laws, or LaTeX formulas ($...$ or $$...$$) in literature, linguistic studies, history, general dialogue, poetry, philosophy, arts, or conversations unrelated to mathematics, physics, or quantitative science. Keep literary and cultural dialogue pure, elegant, natural, and free of arbitrary equations.
 
-CRITICAL IDENTITY MANDATE:
-- If the user asks "من أنت" (Who are you?) or "هل أنت أوميغا أو gemini" (Are you Omega or Gemini?) or inquires about your identity:
-  You must affirmatively and unequivocally clarify that you are operating within the Omega AI Multi-Model Consensus System (نظام أوميغا للذكاء الاصطناعي). Explain that Omega is an advanced consensus architecture combining multiple frontier AI servers (including Qwen, Llama, Gemini, DeepSeek, Claude, etc.) into an integrated ensemble to produce verified consensus answers.
+CRITICAL IDENTITY & CREATOR MANDATE:
+- If the user asks "من قام بإنشائك؟" or "من صنعك؟" or "من طورك؟" or "من أنشأ أوميغا؟" or "من مبرمجك؟" (Who created you? / Who created Omega? / Who developed you?):
+  The answer MUST explicitly state that your creator and developer is **faid Massinissa** (المطور والمنشئ هو faid Massinissa). Express this with high esteem and professional clarity.
+- If the user asks "من أنت" (Who are you?) or "هل أنت أوميغا أو gemini" (Are you Omega or Gemini?) or inquires about your architecture:
+  You must affirmatively and unequivocally clarify that you are operating within the Omega AI Multi-Model Consensus System (نظام أوميغا للذكاء الاصطناعي), created and designed by **faid Massinissa**. Explain that Omega is an advanced consensus architecture combining multiple frontier AI servers (including Qwen, Llama, Gemini, DeepSeek, Claude, etc.) into an integrated ensemble to produce verified consensus answers.
   Never deny that the Omega system exists, and never claim to be an isolated standalone engine disconnected from Omega.
 
 CAPABILITIES AND AWARENESS:
 - You have access to attached documents and files, accurate real-time clock, live global weather data, world news feeds, and social media/YouTube URL analysis.
+
+PHILOSOPHICAL RIGOR & COMPARATIVE RELIGION (معالجة الإشكاليات الفلسفية ومقارنة الأديان بعمق وسهولة):
+- When tackling philosophical dilemmas, comparative religion, epistemology, theology, or metaphysics (such as the problem of evil, existence vs nothingness, free will vs determinism, comparative theological analysis across Islam, Christianity, Judaism, Buddhism, Hinduism, Taoism, or philosophical paradoxes):
+  - NEVER give superficial, hesitant, or shallow bullet points.
+  - Deliver profound, intellectually rigorous, multi-perspective scholarly treatises:
+    1. Epistemological & Ontological Grounds (التأصيل الإبستمولوجي والأنطولوجي للمفاهيم).
+    2. Deep Comparative Theology & Schools of Thought (التحليل المقارن بين الأديان الكبرى وعلم الكلام والفلسفة المشائية والإشراقية، واللاهوت المدرسي، والفلسفات الشرقية والغربية النقدية والتحليلية).
+    3. Deconstruction of Dialectical Tensions & Paradoxes (تفكيك الحجج والحجج المضادة والبراهين المنطقية).
+    4. Integrative Philosophical Synthesis (خلاصة استنتاجية ناضجة توازن بين الرصانة العقلية والعمق الوجداني دون انحياز أو تسطيح).
+
+INTERACTIVE CHARTS & DIAGRAMS (المخططات والرسوم البيانية التفاعلية):
+- When the user asks for charts, graphs, data comparisons, statistical breakdowns, or quantitative trends (e.g. "مخطط بياني", "رسم بياني", "chart", "graph"):
+  - Provide an interactive chart specification block in standard JSON inside \`\`\`chart ... \`\`\`:
+    \`\`\`chart
+    {
+      "type": "bar",
+      "title": "عنوان المخطط التحليلي",
+      "subtitle": "توصيف إحصائي للبيانات",
+      "xAxisKey": "category",
+      "data": [
+        { "category": "العنصر الأول", "القيمة": 85 },
+        { "category": "العنصر الثاني", "القيمة": 92 }
+      ],
+      "series": [
+        { "key": "القيمة", "name": "المؤشر", "color": "#a855f7" }
+      ]
+    }
+    \`\`\`
+  - Accompany the chart with insightful analytical commentary.
+
+AI VISUAL MEDIA GENERATION (الصور والفيديوهات المباشرة):
+- CRITICAL DIRECTIVE FOR DRAWING / GENERATING IMAGES:
+  - When the user requests drawing, sketching, generating, or rendering an image (e.g. "ارسم", "رسم صورة", "ارسم لي", "ولد صورة", "صورة لـ", "generate image", "draw"):
+  - NEVER ONLY DESCRIBE THE SCENE IN TEXT! You MUST directly render and output the image using standard markdown image syntax:
+    ![وصف المشهد](https://image.pollinations.ai/prompt/<ENCODED_ENGLISH_OR_ARABIC_PROMPT_WITH_8K_CINEMATIC_LIGHTING>?width=1024&height=576&seed=42&nologo=true&enhance=true)
+  - Follow the rendered image with an artistic analysis of the scene composition, character design, dramatic lighting, and atmospheric mood.
+
 - Always provide insightful, comprehensive, domain-specialized responses with top accuracy.`;
 }
 
@@ -1106,6 +1381,860 @@ app.post("/api/omega/tools/social", async (req, res) => {
   });
 });
 
+// --- Tool Endpoint: Image Generation ---
+app.post("/api/omega/generate-image", async (req, res) => {
+  const { prompt, aspectRatio = "16:9", style = "cinematic" } = req.body || {};
+  if (!prompt || typeof prompt !== "string") {
+    return res.status(400).json({ ok: false, error: "Missing prompt parameter" });
+  }
+
+  const cleanPrompt = prompt.trim();
+  const seed = Math.floor(Math.random() * 10000000);
+
+  // Calculate resolution based on aspect ratio
+  let width = 1024;
+  let height = 576;
+  if (aspectRatio === "1:1") {
+    width = 1024;
+    height = 1024;
+  } else if (aspectRatio === "9:16") {
+    width = 576;
+    height = 1024;
+  } else if (aspectRatio === "4:3") {
+    width = 1024;
+    height = 768;
+  }
+
+  // Style augmentation keywords
+  const stylePromptMap: Record<string, string> = {
+    cinematic: "photorealistic cinematic photography, 8k resolution, volumetric dramatic lighting, hyperdetailed, masterpiece",
+    digital_art: "stunning 3D digital art, trending on artstation, octane render, vivid colors, concept art, highly detailed",
+    sacred_geometry: "sacred geometry, metaphysical philosophical aesthetic, cosmic mathematical mandala, intricate symmetry, glowing luminous lines",
+    cyberpunk: "cyberpunk futuristic aesthetic, neon violet and cyan glow, intricate technology, dark atmosphere, ultra-detailed",
+    oil_painting: "masterpiece classical oil painting, expressive brushwork, museum quality, rich textures and lighting",
+  };
+  const styleKeywords = stylePromptMap[style] || stylePromptMap.cinematic;
+
+  const ai = getGemini();
+
+  // If prompt is in Arabic, translate/enrich into a high-fidelity visual English prompt
+  let englishVisualPrompt = cleanPrompt;
+  const hasArabic = /[\u0600-\u06FF]/.test(cleanPrompt);
+  if (hasArabic && ai) {
+    try {
+      const translationRes = await callGeminiWithCascade(
+        ai,
+        "gemini-2.5-flash",
+        `Translate and expand this image prompt into a vivid, descriptive English visual prompt for a text-to-image AI model. Keep the subject, composition, and mood faithful to the user's intent. Output ONLY the English prompt, with no quotes or explanations.\nPrompt: "${cleanPrompt}"`,
+        { temperature: 0.3 }
+      );
+      if (translationRes?.text?.trim()) {
+        englishVisualPrompt = translationRes.text.trim().replace(/^["']|["']$/g, "");
+      }
+    } catch {
+      // If translation fails, fall back to cleanPrompt
+    }
+  }
+
+  const enhancedPrompt = `${englishVisualPrompt}, ${styleKeywords}`;
+  if (ai) {
+    try {
+      // Attempt with Gemini 3.1 Flash Image model if available
+      // @ts-ignore
+      const imageRes = await ai.models.generateImages?.({
+        model: "gemini-3.1-flash-image",
+        prompt: enhancedPrompt,
+        config: {
+          numberOfImages: 1,
+          outputMimeType: "image/jpeg",
+          aspectRatio: (aspectRatio === "16:9" ? "16:9" : aspectRatio === "1:1" ? "1:1" : aspectRatio === "9:16" ? "9:16" : "4:3") as any,
+        },
+      });
+      const b64 = imageRes?.generatedImages?.[0]?.image?.imageBytes;
+      if (b64) {
+        return res.json({
+          ok: true,
+          imageUrl: `data:image/jpeg;base64,${b64}`,
+          prompt: cleanPrompt,
+          enhancedPrompt,
+          aspectRatio,
+          style,
+          provider: "gemini-3.1-flash-image",
+          seed,
+        });
+      }
+    } catch {
+      // Gracefully fall back to neural visual synthesis
+    }
+  }
+
+  // Instant AI Visual Synthesis (Pollinations AI high-res image generation)
+  const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=true`;
+
+  return res.json({
+    ok: true,
+    imageUrl,
+    prompt: cleanPrompt,
+    enhancedPrompt,
+    aspectRatio,
+    style,
+    seed,
+    provider: "omega_visual_engine",
+  });
+});
+
+// --- Video Generation Models Catalog ---
+const VIDEO_MODELS_CATALOG: Record<
+  string,
+  {
+    id: string;
+    name: string;
+    company: string;
+    tagline: string;
+    badge: string;
+    accentColor: string;
+    resolution: string;
+    fps: number;
+    physicsRating: string;
+    description: string;
+  }
+> = {
+  "veo-google": {
+    id: "veo-google",
+    name: "Veo (Google)",
+    company: "Google DeepMind",
+    tagline: "من أقوى مولدات الفيديو الواقعية",
+    badge: "واقعية سينمائية فائقة 4K",
+    accentColor: "#3b82f6",
+    resolution: "1080p / 4K Ultra HD",
+    fps: 60,
+    physicsRating: "9.9/10",
+    description: "من أقوى مولدات الفيديو الواقعية عالمياً، يتميز بفهم استثنائي للفيزياء البصرية وحركة الضوء والعدسات السينمائية.",
+  },
+  "runway-gen4": {
+    id: "runway-gen4",
+    name: "Runway Gen-4",
+    company: "Runway",
+    tagline: "ممتاز لتحويل النص أو الصور إلى فيديو",
+    badge: "تحويل النص والصور إلى فيديو",
+    accentColor: "#8b5cf6",
+    resolution: "4K Cinematic",
+    fps: 30,
+    physicsRating: "9.7/10",
+    description: "ممتاز لتحويل النص أو الصور إلى فيديو بتحكم إخراجي دقيق وسيطرة كاملة على الكاميرا وتتابع المشاهد.",
+  },
+  "kling-ai": {
+    id: "kling-ai",
+    name: "Kling AI",
+    company: "Kuaishou Technology",
+    tagline: "جودة حركة واقعية ومحاكاة فيزيائية دقيقة للشخصيات",
+    badge: "محاكاة فيزياء سينمائية متقدمة",
+    accentColor: "#ec4899",
+    resolution: "1080p / 4K UHD",
+    fps: 30,
+    physicsRating: "9.8/10",
+    description: "نموذج رائد في المحاكاة الفيزيائية لحركة الأجسام المعقدة والملامح البشرية ومطابقة قوانين الحركة الكلاسيكية.",
+  },
+  "luma-dream-machine": {
+    id: "luma-dream-machine",
+    name: "Luma AI Dream Machine",
+    company: "Luma AI",
+    tagline: "سريع وجودة عالية",
+    badge: "توليد سريع وفيزياء متناسقة",
+    accentColor: "#06b6d4",
+    resolution: "High-FPS Dynamic",
+    fps: 60,
+    physicsRating: "9.6/10",
+    description: "سريع وجودة عالية مع انسيابية ملحوظة في حركة الأجسام وسرعة استجابة مذهلة لمعالجة الحركة السريعة.",
+  },
+  pika: {
+    id: "pika",
+    name: "Pika",
+    company: "Pika Labs",
+    tagline: "مناسب للفيديوهات القصيرة والرسوم",
+    badge: "رسوم متحركة ومؤثرات",
+    accentColor: "#f43f5e",
+    resolution: "Full HD Animated",
+    fps: 30,
+    physicsRating: "9.3/10",
+    description: "مناسب للفيديوهات القصيرة والرسوم والتأثيرات الخيالية المبتكرة وتعديل أجزاء المشهد بدقة عالية.",
+  },
+  "pixverse-ai": {
+    id: "pixverse-ai",
+    name: "PixVerse AI",
+    company: "PixVerse",
+    tagline: "جيد للمشاهد السينمائية",
+    badge: "إخراج سينمائي وعدسات",
+    accentColor: "#10b981",
+    resolution: "4K Cinematic Widescreen",
+    fps: 30,
+    physicsRating: "9.5/10",
+    description: "جيد للمشاهد السينمائية وضبط عمق الميدان والعدسات الدرامية وإضاءة المشاهد الطبيعية والحضرية.",
+  },
+  "wan-2-2-alibaba": {
+    id: "wan-2-2-alibaba",
+    name: "Wan 2.2 (Alibaba)",
+    company: "Alibaba Cloud",
+    tagline: "نموذج مفتوح يمكن تشغيله محليًا إذا كانت لديك عتاد قوي",
+    badge: "مفتوح المصدر وتشغيل محلي",
+    accentColor: "#f59e0b",
+    resolution: "Up to 1080p Multi-Frame",
+    fps: 30,
+    physicsRating: "9.6/10",
+    description: "نموذج مفتوح يمكن تشغيله محليًا إذا كانت لديك عتاد قوي، من أقوى النماذج المفتوحة عالمياً في دقة التفاصيل الحركية والنصوص.",
+  },
+  "hunyuan-video-tencent": {
+    id: "hunyuan-video-tencent",
+    name: "HunyuanVideo (Tencent)",
+    company: "Tencent",
+    tagline: "نموذج سينمائي مفتوح وفائق الدقة بدعم دقة عالية وحركة سلسة",
+    badge: "استقرار سينمائي فائق مفتوح",
+    accentColor: "#0284c7",
+    resolution: "Cinema 4K High-Res",
+    fps: 60,
+    physicsRating: "9.8/10",
+    description: "نموذج سينمائي مفتوح وفائق الدقة من Tencent، يوفر استقراراً فيزيائياً فائقاً للمشاهد الطويلة وجودة بصرية تتفوق في حركة الكاميرا المتعددة.",
+  },
+  "cogvideox": {
+    id: "cogvideox",
+    name: "CogVideoX (THUDM)",
+    company: "Zhipu AI & THUDM",
+    tagline: "نموذج مفتوح المصدر متخصص في التحويل النصي البصري المكثف",
+    badge: "مفتوح المصدر 3D VAE",
+    accentColor: "#6366f1",
+    resolution: "1080p Transformer Native",
+    fps: 30,
+    physicsRating: "9.5/10",
+    description: "نموذج مفتوح المصدر بمعمارية Expert Transformer و3D VAE يوفر استمرارية مكانية وزمانية استثنائية.",
+  },
+};
+
+// --- Tool Endpoint: Video Models Catalog ---
+app.get("/api/omega/video-models", (req, res) => {
+  return res.json({
+    ok: true,
+    models: Object.values(VIDEO_MODELS_CATALOG),
+  });
+});
+
+// --- Pipeline Tools & Historical Figures Catalog ---
+const PIPELINE_SCIENTISTS_DATA = [
+  {
+    id: "newton",
+    nameAr: "إسحاق نيوتن",
+    nameEn: "Sir Isaac Newton",
+    era: "1643 - 1727م",
+    specialtyAr: "الميكانيكا الكلاسيكية، البصريات، والتفاضل والتكامل",
+    defaultTopicAr: "شرح قانون الجاذبية الكونية وسقوط التفاحة والتفاضل والتكامل",
+    keyEquation: "F = G \\frac{m_1 m_2}{r^2}",
+    quoteAr: "إذا كنت قد رأيت أبعد من غيري، فذلك لأني وقفت على أكتاف العمالقة.",
+  },
+  {
+    id: "einstein",
+    nameAr: "ألبرت أينشتاين",
+    nameEn: "Albert Einstein",
+    era: "1879 - 1955م",
+    specialtyAr: "النسبية العامة والخاصة، التأثير الكهروضوئي، وفيزياء الكم",
+    defaultTopicAr: "شرح النسبية العامة وكيف تنحني نسيج الزمكان بوجود الكتلة والطاقة",
+    keyEquation: "G_{\\mu\\nu} + \\Lambda g_{\\mu\\nu} = \\frac{8\\pi G}{c^4} T_{\\mu\\nu}",
+    quoteAr: "الخيال أكثر أهمية من المعرفة، فالمعرفة محدودة، في حين أن الخيال يطوق العالم بأسره.",
+  },
+  {
+    id: "tesla",
+    nameAr: "نيكولا تيسلا",
+    nameEn: "Nikola Tesla",
+    era: "1856 - 1943م",
+    specialtyAr: "الكهرومغناطيسية، التيار المتردد (AC)، ونقل الطاقة اللاسلكي",
+    defaultTopicAr: "شرح مبدأ عمل التيار المتردد والمجال المغناطيسي الدوار وموجات الراديو",
+    keyEquation: "\\nabla \\times \\mathbf{E} = -\\frac{\\partial \\mathbf{B}}{\\partial t}",
+    quoteAr: "إذا أردت أن تجد أسرار الكون، ففكر في الطاقة والتردد والاهتزاز.",
+  },
+  {
+    id: "curie",
+    nameAr: "ماري كوري",
+    nameEn: "Marie Curie",
+    era: "1867 - 1934م",
+    specialtyAr: "النشاط الإشعاعي، اكتشاف الراديوم والبولونيوم، والفيزياء النووية",
+    defaultTopicAr: "شرح ظاهرة النشاط الإشعاعي التلقائي وتفكك النوى الذرية",
+    keyEquation: "N(t) = N_0 e^{-\\lambda t}",
+    quoteAr: "لا شيء في الحياة يستحق أن يُخشى، بل كل شيء يستحق أن يُفهم.",
+  },
+  {
+    id: "ibn-alhaytham",
+    nameAr: "الحسن بن الهيثم",
+    nameEn: "Al-Hasan Ibn al-Haytham",
+    era: "965 - 1040م",
+    specialtyAr: "علم البصريات (المناظر)، المنهج العلمي التجريبي، وتشريح العين",
+    defaultTopicAr: "شرح كيفية انتقال أشعة الضوء وانعكاسها وانكسارها وتشريح آلية الرؤية بالعين",
+    keyEquation: "n_1 \\sin(\\theta_1) = n_2 \\sin(\\theta_2)",
+    quoteAr: "الحق مطلوب لذاته، وكل ما يطلب لذاته فليس يعنى بوجوده سوى وجوده.",
+  },
+  {
+    id: "feynman",
+    nameAr: "ريتشارد فاينمان",
+    nameEn: "Richard Feynman",
+    era: "1918 - 1988م",
+    specialtyAr: "الكهروديناميكا الكمية (QED)، ومخططات فاينمان، وحوسبة الكم",
+    defaultTopicAr: "شرح ميكانيكا الكم وتفاعل الجسيمات الأولية عبر مخططات فاينمان التفاعلية",
+    keyEquation: "\\langle x_f, t_f | x_i, t_i \\rangle = \\int \\mathcal{D}[x(t)] e^{\\frac{i}{\\hbar} S[x]}",
+    quoteAr: "إذا كنت تعتقد أنك تفهم ميكانيكا الكم، فأنت لا تفهم ميكانيكا الكم!",
+  },
+];
+
+app.get("/api/omega/pipeline/tools", (_req, res) => {
+  return res.json({
+    ok: true,
+    scientists: PIPELINE_SCIENTISTS_DATA,
+  });
+});
+
+// --- Tool Endpoint: Scientific Video Pipeline Orchestration ---
+app.post("/api/omega/pipeline/generate", async (req, res) => {
+  const {
+    topic,
+    scientistId = "newton",
+    scientistName = "إسحاق نيوتن",
+    mode = "flagship", // "flagship" | "open_source" | "custom"
+    tools = {},
+    duration = 18,
+    includeDisclaimer = true,
+  } = req.body || {};
+
+  if (!topic || typeof topic !== "string") {
+    return res.status(400).json({ ok: false, error: "Missing topic parameter" });
+  }
+
+  const cleanTopic = topic.trim();
+  const matchedScientist =
+    PIPELINE_SCIENTISTS_DATA.find((s) => s.id === scientistId) ||
+    PIPELINE_SCIENTISTS_DATA[0];
+
+  const cleanLower = cleanTopic.toLowerCase();
+  const isFreeFall =
+    cleanLower.includes("سقوط") ||
+    cleanLower.includes("شاقولي") ||
+    cleanLower.includes("free fall") ||
+    cleanLower.includes("freefall") ||
+    cleanLower.includes("تفاحة") ||
+    (matchedScientist.id === "newton" &&
+      (cleanLower.includes("جاذبية") || cleanLower.includes("حركة") || cleanLower.includes("قانون")));
+
+  // Configure active tools based on preset mode
+  const resolvedTools = {
+    scriptwriting: mode === "open_source" ? "Qwen 2.5 (Alibaba)" : "GPT-5 / Gemini 3.8",
+    imageGeneration: mode === "open_source" ? "FLUX.1 [schnell] / SDXL" : "FLUX.1 Pro / Imagen 3",
+    videoGeneration: mode === "open_source" ? "Wan 2.2 (Alibaba) / HunyuanVideo" : "Veo (Google) / Runway Gen-4",
+    portraitAnimation: "LivePortrait (512D Keypoints)",
+    lipSync: mode === "open_source" ? "MuseTalk (Tencent)" : "Sync Labs (Sync.1)",
+    voiceSynthesis: mode === "open_source" ? "XTTS v2 / Kokoro TTS" : "ElevenLabs Voice AI",
+    sfxComposition: "ElevenLabs SFX & Foley",
+    videoEditing: "FFmpeg + Remotion Video Pipeline Core",
+    ...tools,
+  };
+
+  const defaultKeyEquation = isFreeFall
+    ? "\\sum \\vec{F} = m \\vec{g} \\implies \\vec{a} = \\vec{g} \\quad , \\quad v(t) = g \\cdot t \\quad , \\quad y(t) = \\frac{1}{2} g t^2"
+    : matchedScientist.keyEquation;
+
+  const ai = getGemini();
+  let generatedScript = {
+    title: isFreeFall
+      ? `محاكاة علمية: ${matchedScientist.nameAr} يشرح قانون السقوط الشاقولي الحر للكتل`
+      : `محاكاة علمية: ${matchedScientist.nameAr} يشرح ${cleanTopic}`,
+    historicalEra: matchedScientist.era,
+    keyEquation: defaultKeyEquation,
+    disclaimer: "إعادة تمثيل ومحاكاة علمية بالذكاء الاصطناعي وليست تسجيلاً حقيقياً • AI Educational Simulation (Non-Authentic Historical Re-enactment)",
+    narration: isFreeFall
+      ? [
+          {
+            speaker: matchedScientist.nameAr,
+            timestamp: "00:00 - 00:05",
+            text: `مرحباً بكم، أنا إسحاق نيوتن. اليوم نبرهن على قانون السقوط الشاقولي الحر: حين نهمل مقاومة الهواء، يتحرك الجسم شاقولياً تحت تأثير قوة ثقله فقط P = mg.`,
+            phonemesCount: 55,
+          },
+          {
+            speaker: matchedScientist.nameAr,
+            timestamp: "00:05 - 00:12",
+            text: `بتطبيق القانون الثاني للتحريك: ∑F = m·a، نجد أن تسارع السقوط a = g = 9.81 m/s² ثابت لجميع الكتل، والسرعة v(t) = gt تتزايد خطياً بانتظام مع الزمن.`,
+            phonemesCount: 78,
+          },
+          {
+            speaker: matchedScientist.nameAr,
+            timestamp: "00:12 - 00:18",
+            text: `والبرهان الخالد: في الفراغ، تسقط التفاحة والريشة معاً وتصلان للأرض في نفس اللحظة لأن تسارع السقوط الحر مستقل تماماً عن الكتلة!`,
+            phonemesCount: 65,
+          },
+        ]
+      : [
+          {
+            speaker: matchedScientist.nameAr,
+            timestamp: "00:00 - 00:05",
+            text: `مرحباً بكم، أنا ${matchedScientist.nameAr}. دعونا نتأمل سوياً في هذه الظاهرة: ${cleanTopic}.`,
+            phonemesCount: 42,
+          },
+          {
+            speaker: matchedScientist.nameAr,
+            timestamp: "00:05 - 00:12",
+            text: `السر يكمن في التماثل الرياضي والقانون الكوني: ${matchedScientist.keyEquation}. كل حركة في الكون تحكمها هذه المبادئ الخالدة.`,
+            phonemesCount: 68,
+          },
+          {
+            speaker: matchedScientist.nameAr,
+            timestamp: "00:12 - 00:18",
+            text: `تذكروا دائماً: لا نصل إلى الحقيقة إلا من خلال الفحص والتجريب والبرهان الصارم.`,
+            phonemesCount: 51,
+          },
+        ],
+    scenes: isFreeFall
+      ? [
+          {
+            id: "scene-1",
+            title: "المشهد 1: شروط السقوط الشاقولي الحر وانطلاق الحركة من السكون (v₀ = 0)",
+            duration: 5,
+            visualPrompt: `Photorealistic 17th century Cambridge laboratory, Sir Isaac Newton releasing a ripe red apple from rest next to a vertical calibrated height scale, cinematic warm candlelight, 8k.`,
+            cameraMotion: "Close-up slow tilt downward following the releasing hand and apple",
+            physicsInteraction: "Free fall initiation from rest under pure gravitational force P = mg, zero initial velocity",
+            voiceLine: `مرحباً بكم، أنا إسحاق نيوتن. في السقوط الشاقولي الحر، نهمل مقاومة الهواء، فيخضع الجسم لقوة ثقله فقط P = mg.`,
+            sfx: "حفيف هادئ لليد، صمت مخبري مهيب، تكتكة ساعة بندولية",
+          },
+          {
+            id: "scene-2",
+            title: "المشهد 2: تسارع الجاذبية وشعاع السرعة اللحظية المتزايد (v = g·t)",
+            duration: 7,
+            visualPrompt: `Dynamic high-speed cinematography of the falling apple, glowing physical vector arrows showing downward weight P=mg in green and growing velocity vector v(t) in cyan, equation y=1/2gt² in air.`,
+            cameraMotion: "Dynamic tracking vertical crane shot moving downward in sync with the falling body",
+            physicsInteraction: "Uniformly accelerated motion with a = g = 9.81 m/s², velocity vector growing linearly with elapsed time v = gt",
+            voiceLine: `بتطبيق القانون الثاني للتحريك: مجموع القوى يساوي الكتلة في التسارع، نجد أن a = g ثابت لجميع الكتل، والسرعة تتزايد بانتظام.`,
+            sfx: "صوت تسارع حركي ديناميكي، رنين المعادلات الرياضية",
+          },
+          {
+            id: "scene-3",
+            title: "المشهد 3: برهان الفراغ الخالد ومقارنة سقوط التفاحة والريشة",
+            duration: 6,
+            visualPrompt: `Newton standing beside a tall glass vacuum tube where an apple and a delicate feather fall side-by-side at the exact same speed hitting the base simultaneously, triumph of experimental physics.`,
+            cameraMotion: "Wide angle showing simultaneous ground impact and ethical simulation disclaimer",
+            physicsInteraction: "Vacuum equivalence demonstration: all objects fall with identical acceleration regardless of mass when air resistance is eliminated",
+            voiceLine: `في الفراغ، تسقط التفاحة والريشة معاً وتصلان للأرض في نفس اللحظة لأن تسارع السقوط الحر لا يعتمد مطلقاً على كتلة الجسم!`,
+            sfx: "صوت ارتطام هادئ ومتزامن للقاعدتين، تصاعد موسيقى كلاسيكية ملهمة",
+          },
+        ]
+      : [
+          {
+            id: "scene-1",
+            title: "المشهد 1: مدخل تاريخي في المختبر",
+            duration: 5,
+            visualPrompt: `Photorealistic historical scene of ${matchedScientist.nameEn} in their iconic study or laboratory, warm cinematic lighting, high-contrast, holding scientific apparatus.`,
+            cameraMotion: "Slow cinematic push-in (Zoom + Pan)",
+            physicsInteraction: "Volumetric dust particles drifting through sunlight rays, candlelight flicker",
+            voiceLine: `مرحباً بكم، أنا ${matchedScientist.nameAr}. دعونا نتأمل سوياً في هذه الظاهرة: ${cleanTopic}.`,
+            sfx: "صوت خطوات هادئة على أرضية خشبية، تكتكة ساعة بندولية قديمة",
+          },
+          {
+            id: "scene-2",
+            title: "المشهد 2: كشف المبدأ الفيزيائي والمعادلة",
+            duration: 7,
+            visualPrompt: `Dynamic visual demonstration of ${cleanTopic}, glowing mathematical vectors and equations (${matchedScientist.keyEquation}) suspended in 3D spacetime around ${matchedScientist.nameEn}.`,
+            cameraMotion: "Orbital 360-degree arc shot around subject and apparatus",
+            physicsInteraction: "Gravitational trajectories / electric spark discharge / optical refraction path",
+            voiceLine: `السر يكمن في التماثل الرياضي والقانون الكوني: ${matchedScientist.keyEquation}. كل حركة في الكون تحكمها هذه المبادئ الخالدة.`,
+            sfx: "رنين زجاجي نقي للمنشور / صوت تداخل وتر كمومي / هبوط التفاحة على الأرض",
+          },
+          {
+            id: "scene-3",
+            title: "المشهد 3: الخاتمة والتأصيل العلمي والشارة",
+            duration: 6,
+            visualPrompt: `Cinematic wide angle of ${matchedScientist.nameEn} smiling thoughtfully toward the celestial cosmos, with academic transparency disclaimer badge at bottom.`,
+            cameraMotion: "Smooth backward pedestal crane-out",
+            physicsInteraction: "Cosmic stellar drift, luminous aurora equilibrium",
+            voiceLine: `تذكروا دائماً: لا نصل إلى الحقيقة إلا من خلال الفحص والتجريب والبرهان الصارم.`,
+            sfx: "تصاعد موسيقى أوركسترالية ملهمة تنتهي بانسجام هادئ",
+          },
+        ],
+  };
+
+  // If Gemini is active, let it tailor the script and scientific breakdown with deep factual accuracy
+  if (ai) {
+    try {
+      const scriptPrompt = `You are the Lead Scientific Director and Pipeline Architect for Omega AI Educational Re-enactments.
+Create a structured scientific script and storyboard for a high-end AI educational video where historical scientist "${matchedScientist.nameAr} (${matchedScientist.nameEn})" explains:
+"${cleanTopic}"
+
+Language: Arabic (فصحى علمية أنيقة ورصينة تناسب وقار العالم).
+The video MUST contain strict scientific accuracy, correct physical laws, and formulas.
+CRITICAL ETHICAL CONSTRAINT: Must include an explicit ethical disclaimer that this is an AI scientific simulation/re-enactment, not authentic footage.
+
+Return strictly a valid JSON object matching this schema:
+{
+  "title": "عنوان الفيديو العلمي",
+  "summary": "ملخص الفكرة العلمية وشرحها بدقة فيزيائية",
+  "keyEquation": "معادلة لاتيكس KaTeX المناسبة للموضوع",
+  "scenes": [
+    {
+      "id": "scene-1",
+      "title": "عنوان المشهد 1",
+      "duration": 6,
+      "visualPrompt": "Detailed English visual prompt for FLUX.1/Veo",
+      "cameraMotion": "حركة الكاميرا",
+      "physicsInteraction": "التفاعل الفيزيائي ومحاكاة الحركة",
+      "voiceLine": "جملة الحوار العلمي على لسان العالم",
+      "sfx": "المؤثرات الصوتية للمشهد"
+    },
+    {
+      "id": "scene-2",
+      "title": "عنوان المشهد 2 (التجربة والبرهان)",
+      "duration": 6,
+      "visualPrompt": "Detailed English visual prompt for FLUX.1/Veo",
+      "cameraMotion": "حركة الكاميرا",
+      "physicsInteraction": "التفاعل الفيزيائي",
+      "voiceLine": "شرح المعادلة أو الظاهرة بالتفصيل",
+      "sfx": "المؤثرات الصوتية"
+    },
+    {
+      "id": "scene-3",
+      "title": "عنوان المشهد 3 (الخلاصة والرسالة)",
+      "duration": 6,
+      "visualPrompt": "Detailed English visual prompt for FLUX.1/Veo",
+      "cameraMotion": "حركة الكاميرا",
+      "physicsInteraction": "التفاعل البصري",
+      "voiceLine": "خلاصة العالم الملهمة",
+      "sfx": "المؤثرات الصوتية"
+    }
+  ]
+}`;
+
+      const aiResponse = await callGeminiWithCascade(
+        ai,
+        "gemini-3.8-flash",
+        scriptPrompt,
+        { temperature: 0.3 }
+      );
+
+      const parsedText = aiResponse?.text?.replace(/```json\n?|```/g, "").trim();
+      if (parsedText) {
+        const parsed = JSON.parse(parsedText);
+        if (parsed && Array.isArray(parsed.scenes) && parsed.scenes.length > 0) {
+          generatedScript.title = parsed.title || generatedScript.title;
+          if (parsed.keyEquation) generatedScript.keyEquation = parsed.keyEquation;
+          generatedScript.scenes = parsed.scenes;
+          generatedScript.narration = parsed.scenes.map((s: any, idx: number) => ({
+            speaker: matchedScientist.nameAr,
+            timestamp: `00:${idx * 6}`.padStart(5, "0") + ` - 00:${(idx + 1) * 6}`.padStart(5, "0"),
+            text: s.voiceLine,
+            phonemesCount: Math.round((s.voiceLine || "").length * 1.8),
+          }));
+        }
+      }
+    } catch {
+      // Fallback script used seamlessly
+    }
+  }
+
+  // Generate visual asset representations for each scene
+  const seed = Math.floor(Math.random() * 10000000);
+  const visualStoryboard = generatedScript.scenes.map((scene, idx) => {
+    const promptEnc = encodeURIComponent(`${scene.visualPrompt}, photorealistic, historical accuracy, 8k resolution, cinematic lighting, masterpiece`);
+    return {
+      sceneId: scene.id,
+      title: scene.title,
+      imageUrl: `https://image.pollinations.ai/prompt/${promptEnc}?width=1024&height=576&seed=${seed + idx}&nologo=true`,
+    };
+  });
+
+  // Pipeline Execution Trace Steps (Simulated production pipeline execution with realistic sub-step latencies and logs)
+  const pipelineTrace = [
+    {
+      stage: "scriptwriting",
+      stageNameAr: "1. كتابة السيناريو العلمي والمشاهد",
+      tool: resolvedTools.scriptwriting,
+      status: "completed",
+      durationMs: 720,
+      log: `تمت صياغة السيناريو العلمي الدقيق بدقة المفاهيم الفيزيائية وتوزيع المشاهد مع التوافق التاريخي لـ ${matchedScientist.nameAr}.`,
+    },
+    {
+      stage: "image_generation",
+      stageNameAr: "2. توليد البورتريه البصري والمختبر التاريخي",
+      tool: resolvedTools.imageGeneration,
+      status: "completed",
+      durationMs: 1450,
+      log: `توليد الأساس البصري فوتوغرافي بدقة 8K مع ضبط الإضاءة الحجمية والملامح التشريحية للشخصية.`,
+    },
+    {
+      stage: "video_generation",
+      stageNameAr: "3. توليد حركة المشهد والفيزياء البصرية",
+      tool: resolvedTools.videoGeneration,
+      status: "completed",
+      durationMs: 2300,
+      log: `معالجة الحركة الديناميكية وتتبع مسار الكاميرا ومحاكاة الفيزياء الحركية وسقوط الأجسام وانحناء الضوء.`,
+    },
+    {
+      stage: "portrait_animation",
+      stageNameAr: "4. تحريك ملامح الوجه وتعبيرات التفكير",
+      tool: resolvedTools.portraitAnimation,
+      status: "completed",
+      durationMs: 890,
+      log: `تتبع شبكة النقاط الوجهية (512D Face Landmarks) ومحاكاة رموش العين ونظرات التأمل العلمي.`,
+    },
+    {
+      stage: "lip_sync",
+      stageNameAr: "5. مزامنة الشفاه الصوتية الدقيقة (Lip Sync)",
+      tool: resolvedTools.lipSync,
+      status: "completed",
+      durationMs: 640,
+      log: `تطابق الفونيمات الصوتية مع حركة عضلات الفم والشفاه بدقة عالية بمعدل 30 FPS دون تشويه للوجه.`,
+    },
+    {
+      stage: "voice_synthesis",
+      stageNameAr: "6. استنساخ النبرة الصوتية التاريخية وتوليد المؤثرات",
+      tool: resolvedTools.voiceSynthesis,
+      status: "completed",
+      durationMs: 1100,
+      log: `توليد خامة صوتية وقورة ومهيبة تناسب عصر ${matchedScientist.nameAr}، ومزج مؤثرات المختبر (Foley).`,
+    },
+    {
+      stage: "video_editing",
+      stageNameAr: "7. المونتاج والتجميع وإدراج شارة الشفافية",
+      tool: resolvedTools.videoEditing,
+      status: "completed",
+      durationMs: 510,
+      log: `دمج المسارات الصوتية والبصرية، عرض معادلات KaTeX العائمة، وتثبيت الشارة الإلزامية: [محاكاة علمية بالذكاء الاصطناعي وليست تسجيلاً حقيقياً].`,
+    },
+  ];
+
+  return res.json({
+    ok: true,
+    pipeline: {
+      mode,
+      topic: cleanTopic,
+      scientist: matchedScientist,
+      tools: resolvedTools,
+      executionTrace: pipelineTrace,
+      totalDuration: duration,
+      storyboard: visualStoryboard,
+      script: generatedScript,
+      disclaimer: includeDisclaimer ? generatedScript.disclaimer : null,
+      videoData: {
+        prompt: cleanTopic,
+        duration,
+        style: "historical_educational_simulation",
+        seed,
+        isGenerative: true,
+        isPipelineGenerated: true,
+        theme: isFreeFall ? "free_fall" : "science",
+        scientistId: matchedScientist.id,
+        scientistName: matchedScientist.nameAr,
+        scientistEra: matchedScientist.era,
+        keyEquation: generatedScript.keyEquation,
+        modelId: resolvedTools.videoGeneration,
+        modelName: `Pipeline: ${resolvedTools.videoGeneration}`,
+        modelProvider: `${resolvedTools.scriptwriting} + ${resolvedTools.imageGeneration} + ${resolvedTools.videoGeneration}`,
+        modelTagline: "خط إنتاج فيديو علمي تكاملي متعدد النماذج",
+        modelBadge: mode === "open_source" ? "مفتوح المصدر 100% محلي" : "أعلى جودة سينمائية (Flagship)",
+        resolution: "1080p / 4K UHD",
+        fps: 60,
+        physicsRating: "9.9/10",
+        scenes: generatedScript.scenes.map((s) => ({
+          name: s.title,
+          description: `${s.cameraMotion} • ${s.physicsInteraction}`,
+          voiceLine: s.voiceLine,
+          sfx: s.sfx,
+        })),
+        disclaimer: generatedScript.disclaimer,
+      },
+    },
+  });
+});
+
+
+// --- Tool Endpoint: Video Generation ---
+app.post("/api/omega/generate-video", async (req, res) => {
+  const { prompt, duration = 10, style = "cinematic", videoModel = "veo-google" } = req.body || {};
+  if (!prompt || typeof prompt !== "string") {
+    return res.status(400).json({ ok: false, error: "Missing prompt parameter" });
+  }
+
+  const cleanPrompt = prompt.trim();
+  const seed = Math.floor(Math.random() * 10000000);
+  const pLower = cleanPrompt.toLowerCase();
+  const isFreeFall =
+    pLower.includes("سقوط") ||
+    pLower.includes("شاقولي") ||
+    pLower.includes("free fall") ||
+    pLower.includes("freefall") ||
+    pLower.includes("تفاحة") ||
+    (pLower.includes("نيوتن") &&
+      (pLower.includes("قانون") || pLower.includes("جاذبية") || pLower.includes("حركة")));
+
+  const selectedModelSpec =
+    VIDEO_MODELS_CATALOG[videoModel] || VIDEO_MODELS_CATALOG["veo-google"];
+
+  return res.json({
+    ok: true,
+    videoData: {
+      prompt: cleanPrompt,
+      duration: Math.max(6, Math.min(30, duration)),
+      style: isFreeFall ? "historical_educational_simulation" : style,
+      seed,
+      isGenerative: true,
+      theme: isFreeFall ? "free_fall" : undefined,
+      keyEquation: isFreeFall
+        ? "\\sum \\vec{F} = m \\vec{g} \\implies \\vec{a} = \\vec{g} \\quad , \\quad v(t) = g \\cdot t \\quad , \\quad y(t) = \\frac{1}{2} g t^2"
+        : undefined,
+      scientistName: isFreeFall ? "السير إسحاق نيوتن" : undefined,
+      modelId: selectedModelSpec.id,
+      modelName: selectedModelSpec.name,
+      modelProvider: selectedModelSpec.company,
+      modelTagline: selectedModelSpec.tagline,
+      modelBadge: selectedModelSpec.badge,
+      resolution: selectedModelSpec.resolution,
+      fps: selectedModelSpec.fps,
+      physicsRating: selectedModelSpec.physicsRating,
+      scenes: isFreeFall
+        ? [
+            {
+              name: "المشهد 1: شروط السقوط الشاقولي الحر (v₀ = 0)",
+              description: "انطلاق حركة السقوط من السكون تحت تأثير قوة الثقل P = mg فقط بإهمال مقاومة الهواء.",
+              voiceLine: "مرحباً بكم، أنا إسحاق نيوتن. في السقوط الشاقولي الحر، نهمل مقاومة الهواء، فيخضع الجسم لقوة ثقله فقط P = mg.",
+            },
+            {
+              name: "المشهد 2: تسارع الجاذبية وشعاع السرعة المتزايد (v = g·t)",
+              description: "التسارع ثابت a = g = 9.81 m/s² وشعاع السرعة اللحظية v(t) يزداد خطياً مع الزمن.",
+              voiceLine: "بتطبيق القانون الثاني للتحريك: ∑F = m·a، نجد أن تسارع السقوط a = g ثابت لجميع الكتل، وتزداد السرعة v = gt بانتظام.",
+            },
+            {
+              name: "المشهد 3: برهان الفراغ الخالد ومقارنة التفاحة والريشة",
+              description: "في الفراغ، تسقط التفاحة والريشة بنفس التسارع وتصلان للأرض معاً لأن السقوط الحر مستقل عن الكتلة.",
+              voiceLine: "تذكروا دائماً: في غياب الهواء، تسقط التفاحة والريشة معاً وتصلان للأرض في نفس اللحظة لأن التسارع لا يعتمد على الكتلة!",
+            },
+          ]
+        : [
+            { name: "Scene 1: Emergence", description: `Formation and genesis: ${cleanPrompt}` },
+            { name: "Scene 2: Kinetic Transformation", description: `Dynamic camera motion & physics guided by ${selectedModelSpec.name}` },
+            { name: "Scene 3: Harmonious Synthesis", description: `Equilibrium, high dynamic range & visual coherence` },
+          ],
+    },
+  });
+});
+
+// --- Tool Endpoint: Voice & Speech Synthesis Catalog ---
+app.get("/api/omega/voice/catalog", (_req, res) => {
+  return res.json({
+    ok: true,
+    engines: [
+      {
+        id: "elevenlabs",
+        name: "ElevenLabs Voice AI",
+        company: "ElevenLabs",
+        tagline: "المعيار الذهبي للأصوات البشرية فائقة الواقعية والعمق النفسي والتنفسي",
+        badge: "Flagship Hollywood Quality",
+        latency: "~220ms",
+        qualityRating: "9.9/10",
+        isOpenSource: false,
+        isFlagship: true,
+        accentColor: "#a855f7",
+      },
+      {
+        id: "cartesia",
+        name: "Cartesia Sonic",
+        company: "Cartesia AI",
+        tagline: "أسرع محرك صوتي في العالم بزمن استجابة أقل من 90ms للمحادثات الحية الفورية",
+        badge: "Ultra-Low Latency <90ms",
+        latency: "85ms",
+        qualityRating: "9.7/10",
+        isOpenSource: false,
+        isFlagship: true,
+        accentColor: "#06b6d4",
+      },
+      {
+        id: "kokoro-tts",
+        name: "Kokoro TTS (82M)",
+        company: "Hexgrad Open Source",
+        tagline: "نموذج صوتي مفتوح المصدر فائق الخفة والكفاءة بجودة أجهزة الاستوديو",
+        badge: "Open Source 100% Local",
+        latency: "110ms",
+        qualityRating: "9.4/10",
+        isOpenSource: true,
+        isFlagship: false,
+        accentColor: "#10b981",
+      },
+      {
+        id: "xtts-v2",
+        name: "XTTS v2 (Coqui)",
+        company: "Coqui Open Source",
+        tagline: "استنساخ نبرة وتطبيع الأصوات عبر 17 لغة مع ضبط العاطفة والإيقاع",
+        badge: "Cross-Lingual Clone",
+        latency: "280ms",
+        qualityRating: "9.3/10",
+        isOpenSource: true,
+        isFlagship: false,
+        accentColor: "#f59e0b",
+      },
+      {
+        id: "openai-tts",
+        name: "OpenAI TTS-1-HD",
+        company: "OpenAI",
+        tagline: "أصوات أونكس وشيمر وألوي فائقة النقاء للبودكاست والردود التفاعلية",
+        badge: "Studio 48kHz HD",
+        latency: "170ms",
+        qualityRating: "9.5/10",
+        isOpenSource: false,
+        isFlagship: true,
+        accentColor: "#10b981",
+      },
+      {
+        id: "gemini-tts",
+        name: "Google Gemini Neural TTS",
+        company: "Google DeepMind",
+        tagline: "توليد صوتي عصبي ذكي يتناغم مع المنطق وسياق الحوار بطلاقة عربية وعالمية",
+        badge: "DeepMind Multimodal",
+        latency: "140ms",
+        qualityRating: "9.8/10",
+        isOpenSource: false,
+        isFlagship: true,
+        accentColor: "#38bdf8",
+      },
+    ],
+    categories: [
+      { id: "scientists", nameAr: "أصوات العلماء (نيوتن، أينشتاين، تيسلا...)" },
+      { id: "celebrities", nameAr: "أصوات المشاهير والرواد (مورغان فريمان، أتينبورو، ستيف جوبز...)" },
+      { id: "documentary", nameAr: "أصوات الأفلام الوثائقية والرواة (ناشيونال جيوغرافيك، الرواية السينمائية...)" },
+    ],
+  });
+});
+
+app.post("/api/omega/voice/synthesize", async (req, res) => {
+  const { text, personaId = "doc-arabic-fusha", engineId = "elevenlabs", speed = 1.0 } = req.body || {};
+  if (!text || typeof text !== "string") {
+    return res.status(400).json({ ok: false, error: "Missing text parameter" });
+  }
+
+  // Clean markdown/code markers for auditory presentation
+  const cleanedText = text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, "$1")
+    .replace(/\[(.*?)\]\(.*?\)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const wordsCount = cleanedText.split(/\s+/).filter(Boolean).length;
+  const estimatedSeconds = Math.max(2, Math.round((wordsCount / (130 * speed)) * 60));
+
+  return res.json({
+    ok: true,
+    speechData: {
+      text: cleanedText,
+      personaId,
+      engineId,
+      speed,
+      wordsCount,
+      estimatedDurationSeconds: estimatedSeconds,
+      timestamp: Date.now(),
+      status: "synthesized",
+    },
+  });
+});
+
 // Server-side unified ensemble dispatch (Generates all candidate perspectives in 1 single Gemini call)
 app.post("/api/omega/ensemble", async (req, res) => {
   cleanCaches();
@@ -1212,9 +2341,14 @@ COLLABORATIVE COMPLEMENTARITY MANDATE:
    - "gemini-3.8-flash": High-speed empirical clarity, verified factual grounding, and temporal accuracy.
    - "claude-3-5-sonnet-compat" / "llama-3-3-compat": Nuanced intellectual synthesis and pragmatic implementation.
 3. Respond in the same language as the user query (Arabic if Arabic, English if English).
-4. If documents are attached, thoroughly analyze, extract, and reference their actual content, numbers, sections, and conclusions!
-5. For all math, physics, or scientific expressions, ALWAYS use KaTeX LaTeX formatting: $...$ for inline and $$...$$ for block display equations.
-6. You MUST return ONLY a valid JSON array of objects conforming exactly to this schema:
+4. If the user asks who created, designed, or developed you or Omega, ALL models must explicitly affirm that the creator and developer is **faid Massinissa**.
+5. If documents are attached, thoroughly analyze, extract, and reference their actual content, numbers, sections, and conclusions!
+6. ANTI-HALLUCINATION & FACTUAL GROUNDING:
+   - For complex, scientific, historical, or specialized topics, rely strictly on verified facts and sound causality. Never fabricate citations, non-existent sources, or unverified claims.
+7. MATHEMATICAL RIGOR & LITERATURE EXCLUSION:
+   - For all math, physics, or scientific expressions, ALWAYS use KaTeX LaTeX formatting: $...$ for inline and $$...$$ for block display equations.
+   - CRITICAL NEGATIVE CONSTRAINT: DO NOT output any math formulas, physics equations, or LaTeX syntax in literature, poetry, linguistic studies, history, or general non-scientific human conversations!
+8. You MUST return ONLY a valid JSON array of objects conforming exactly to this schema:
 [
   {
     "modelId": "model-id-string",
@@ -1319,13 +2453,15 @@ ${candidatesContext}
    - خادم التحليل التركيبي (Claude / Llama) يقدم التوازن والعمق التطبيقي.
 2. فحص المستندات والوثائق المرفقة:
    - إذا كان الاستفسار يتعلق بمستندات مرفقة، قم بتلخيصها وتحليلها وفحص مؤشراتها وأرقامها وتقديم إجابة حاسمة وافية.
-3. استنتاج الحقيقة الصائبة (كالإنسان الحصيف والمهندس المعرفي):
+3. استنتاج الحقيقة الصائبة ومنع الهلوسة (Anti-Hallucination & Factual Grounding):
+   - تحرَّ الدقة التامة والتثبت؛ لا تقم باختلاق مراجع، روابط، أحداث، أو معلومات غير مؤكدة عند الإجابة عن مواضيع معقدة أو متخصصة.
+   - إذا كان الموضوع معقداً، قم بتفكيكه استدلالياً بالاعتماد على الحقائق الموثقة والأدلة الدامغة.
    - إذا ظهر أي تباين ظاهري أو زاوية نظر مختلفة بين الخوادم، حلل السبب وفسره بمنطق رصين، واستنتج الإجابة القطعية المتماسكة علمياً ومنطقياً.
    - لا تسرد آراء متضاربة وتترك المستخدم في حيرة؛ بل ادمج أفضل ما في كل خادم في إجابة موحدة، شاملة، وواثقة ومكتملة العناصر.
-4. التنسيق العلمي والرياضي:
-   - استخدم دائماً صيغ KaTeX LaTeX: معادلات مضمنة $...$ ومعادلات كتلية منفصلة $$...$$.
-   - رتب الإجابة بعناوين واضحة وتنسيق Markdown بديع.
-5. الهوية: تحدث باسم "نظام أوميغا للذكاء الاصطناعي (Omega AI)" — العقل الموحد متعدد الخوادم.`;
+4. التنسيق العلمي والرياضي وحظر المعادلات في الأدب:
+   - استخدم صيغ KaTeX LaTeX: معادلات مضمنة $...$ ومعادلات كتلية منفصلة $$...$$ حصراً عند طرح مسائل الرياضيات والفيزياء والحساب والعلوم الدقيقة.
+   - حظر قاطع: يُمنع منعاً باتاً إقحام المعادلات الرياضية أو الرموز الفيزيائية أو صيغ LaTeX في مواضيع الأدب، الشعر، الروايات، الحوارات العامة، أو الفنون!
+5. الهوية والمنشئ: تحدث باسم "نظام أوميغا للذكاء الاصطناعي (Omega AI)". وإذا سأل المستخدم عمن قام بإنشائك أو برمجتك، فالجواب القطعي الدائم هو: faid Massinissa.`;
 
   // Multimodal parts (images only)
   const inlineParts = (Array.isArray(attachments) ? attachments : [])

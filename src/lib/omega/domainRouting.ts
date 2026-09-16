@@ -11,6 +11,7 @@ export type Domain =
   | "math_logic"
   | "science_factual"
   | "creative_writing"
+  | "philosophy_theology"
   | "general";
 
 export interface DomainRouteResult {
@@ -42,6 +43,18 @@ const DOMAIN_KEYWORDS: Record<Domain, string[]> = {
     "story", "poem", "essay", "metaphor", "character", "creative", "fiction",
     "rhyme", "dialogue", "novel", "narrative", "lyric",
     "قصة", "شعر", "رواية", "مقال", "استعارة", "شخصية", "إبداعي", "حوار", "قافية", "خيال"
+  ],
+  philosophy_theology: [
+    "philosophy", "theology", "religion", "faith", "ethics", "morality", "existentialism",
+    "epistemology", "metaphysics", "ontology", "logic", "dialectic", "soul", "god", "afterlife",
+    "free will", "determinism", "islam", "christianity", "judaism", "buddhism", "hinduism", "taoism",
+    "quran", "bible", "torah", "atheism", "agnosticism", "spinoza", "kant", "nietzsche", "al-ghazali",
+    "ibn rushd", "aquinas", "problem of evil", "teleology", "consciousness",
+    "فلسفة", "دين", "أديان", "مقارنة أديان", "لاهوت", "علم الكلام", "عقيدة", "أخلاق", "وجود", "عدم",
+    "معرفة", "إبستمولوجيا", "ميتافيزيقا", "أنطولوجيا", "حرية الإرادة", "حتمية", "مشكلة الشر", "إسلام",
+    "مسيحية", "يهودية", "بوذية", "هندوسية", "طاوية", "القرآن", "الإنجيل", "التوراة", "ابن رشد", "الغزالي",
+    "ابن سينا", "كانط", "نيتشه", "سبينوزا", "توما الأكويني", "الروح", "الوعي", "التوحيد", "التثليث",
+    "التناسخ", "الكارما", "المعنى", "العدالة الإلهية", "فلسفي", "فلسفية", "إشكالية", "إشكاليات"
   ],
   general: [
     "who", "what", "where", "when", "how", "hello", "help", "summary", "explain", "analyze", "review",
@@ -75,6 +88,13 @@ const DOMAIN_MODEL_PRIORITY: Record<Domain, ModelId[]> = {
     "gemini-3.8-flash",
     "gpt-4o-compat",
   ],
+  philosophy_theology: [
+    "deepseek-r1-compat",
+    "claude-3-5-sonnet-compat",
+    "gpt-4o-compat",
+    "gemini-3.8-flash",
+    "qwen-2-5-compat",
+  ],
   general: [
     "gpt-4o-compat",
     "gemini-3.8-flash",
@@ -92,6 +112,7 @@ export function detectDomain(question: string): { domain: Domain; confidence: nu
     math_logic: 0,
     science_factual: 0,
     creative_writing: 0,
+    philosophy_theology: 0,
     general: 0,
   };
   const matchedWords: Record<Domain, string[]> = {
@@ -99,6 +120,7 @@ export function detectDomain(question: string): { domain: Domain; confidence: nu
     math_logic: [],
     science_factual: [],
     creative_writing: [],
+    philosophy_theology: [],
     general: [],
   };
 

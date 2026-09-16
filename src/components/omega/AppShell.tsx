@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   MessageSquare,
   Brain,
@@ -8,6 +8,8 @@ import {
   ShieldCheck,
   Zap,
   Terminal,
+  UserCheck,
+  LogIn,
 } from "lucide-react";
 import { OmegaMark } from "./OmegaMark";
 import { ModelBar } from "./ModelBar";
@@ -16,6 +18,7 @@ import { KernelLab } from "./KernelLab";
 import { MemoryView } from "./MemoryView";
 import { LineageView } from "./LineageView";
 import { OptimizerLab } from "./OptimizerLab";
+import { AuthModal, type OmegaUser } from "./AuthModal";
 import { DEFAULT_OMEGA_CONFIG, type OmegaConfig } from "../../lib/omega/optimizer";
 import type { FusionResult } from "../../lib/omega/fusion";
 
@@ -25,6 +28,35 @@ export const AppShell: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>("chat");
   const [config, setConfig] = useState<OmegaConfig>(DEFAULT_OMEGA_CONFIG);
   const [inspectedResult, setInspectedResult] = useState<FusionResult | null>(null);
+  const [currentUser, setCurrentUser] = useState<OmegaUser | null>(null);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("omega_auth_user");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.email) {
+          setCurrentUser(parsed);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleLogin = (user: OmegaUser) => {
+    setCurrentUser(user);
+  };
+
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem("omega_auth_user");
+    } catch {
+      // ignore
+    }
+    setCurrentUser(null);
+  };
 
   const handleOpenKernelWithResult = (result: FusionResult) => {
     setInspectedResult(result);
@@ -88,7 +120,7 @@ export const AppShell: React.FC = () => {
               </div>
             </div>
 
-            {/* System Status Indicators */}
+            {/* System Status Indicators & Auth Button */}
             <div className="flex items-center gap-2 text-xs">
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-slate-300 font-mono text-[11px]">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -96,6 +128,29 @@ export const AppShell: React.FC = () => {
                 <span className="text-slate-500">|</span>
                 <span className="text-cyan-400">Ψ Engine Ready</span>
               </div>
+
+              <button
+                type="button"
+                onClick={() => setIsAuthOpen(true)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                  currentUser
+                    ? "bg-purple-950/70 border-purple-500/50 text-purple-200 hover:bg-purple-900/60"
+                    : "bg-slate-900 hover:bg-slate-800 border-slate-700 text-slate-200 hover:border-purple-500/50"
+                }`}
+                title={currentUser ? `مسجل كـ: ${currentUser.email}` : "الدخول بالبريد الإلكتروني"}
+              >
+                {currentUser ? (
+                  <>
+                    <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="max-w-[120px] truncate">{currentUser.name || currentUser.email}</span>
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="w-3.5 h-3.5 text-purple-400" />
+                    <span>الدخول بالإيميل</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
 
@@ -149,6 +204,15 @@ export const AppShell: React.FC = () => {
           <OptimizerLab config={config} onChangeConfig={setConfig} />
         )}
       </main>
+
+      {/* Email Authentication Security Modal */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        currentUser={currentUser}
+        onLogin={handleLogin}
+        onLogout={handleLogout}
+      />
     </div>
   );
 };

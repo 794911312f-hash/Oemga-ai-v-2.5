@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Send,
   Sparkles,
@@ -25,6 +25,25 @@ import {
   CheckCircle2,
   Copy,
   Check,
+  Plus,
+  History,
+  Wand2,
+  Film,
+  BarChart3,
+  Download,
+  Workflow,
+  Mic,
+  MicOff,
+  Activity,
+  Volume2,
+  VolumeX,
+  Play,
+  Pause,
+  Square,
+  Radio,
+  X,
+  GitBranch,
+  BookOpen,
 } from "lucide-react";
 import type { ChatMessage, ChatAttachment } from "../../lib/omega/types";
 import { fuseResponses, type FusionResult } from "../../lib/omega/fusion";
@@ -33,10 +52,47 @@ import { globalOmegaMemory } from "../../lib/omega/memory";
 import { globalOmegaLineage } from "../../lib/omega/lineage";
 import { globalOmegaKernel } from "../../lib/omega/kernel";
 import type { OmegaConfig } from "../../lib/omega/optimizer";
-import { OMEGA_MODELS } from "../../lib/omega/models";
 import { MathRenderer } from "./MathRenderer";
 import { AttachmentPicker } from "./AttachmentPicker";
 import { OmegaCapabilityModal, type CapabilityTab } from "./OmegaCapabilityModal";
+import { OmegaVoicePlayer } from "./OmegaVoicePlayer";
+import { AudioFrequencyVisualizer } from "./AudioFrequencyVisualizer";
+import { LiveVoiceInteractionModal } from "./LiveVoiceInteractionModal";
+import { useVoiceInteraction } from "../../lib/omega/useVoiceInteraction";
+import {
+  OMEGA_VOICE_PERSONAS,
+  OMEGA_VOICE_ENGINES,
+  speakWithOmega,
+  stopSpeaking,
+  pauseSpeaking,
+  resumeSpeaking,
+  subscribeSpeechState,
+  type VoicePersona,
+  type VoiceCategory,
+} from "../../lib/omega/speech";
+import { OmegaMediaModal } from "./OmegaMediaModal";
+import { ChatHistoryDrawer } from "./ChatHistoryDrawer";
+import { OmegaVideoPlayer } from "./OmegaVideoPlayer";
+import { OmegaProfessor3D } from "./OmegaProfessor3D";
+import { InteractivePhysicsLab } from "./InteractivePhysicsLab";
+import {
+  TreeOfThoughtVisualizer,
+  createThoughtTreeFromFusion,
+  type ProblemCase,
+} from "./TreeOfThoughtVisualizer";
+import { OmegaNotebookModal } from "./OmegaNotebookModal";
+import { OmegaCodeSandbox } from "./OmegaCodeSandbox";
+import {
+  loadSessions,
+  createSession,
+  updateSession,
+  deleteSession,
+  renameSession,
+  clearAllSessions,
+  findRelevantPastContext,
+  generateSessionTitle,
+  type ChatSession,
+} from "../../lib/omega/chatHistory";
 
 interface ChatViewProps {
   config: OmegaConfig;
@@ -45,6 +101,48 @@ interface ChatViewProps {
 }
 
 const SAMPLE_PROMPTS = [
+  {
+    label: "فيديو علمي: نيوتن يشرح السقوط الشاقولي الحر (Pipeline)",
+    icon: Workflow,
+    domain: "science_factual",
+    prompt: "أنتج فيديو علمي تعليمي لنيوتن يشرح قانون السقوط الشاقولي الحر للكتل وتسارع الجاذبية الأرضية بواسطة خط إنتاج النماذج المتعددة",
+  },
+  {
+    label: "فيديو علمي: أينشتاين يشرح انحناء الزمكان (Pipeline)",
+    icon: Atom,
+    domain: "science_factual",
+    prompt: "أنتج فيديو علمي تعليمي لأينشتاين يشرح النسبية العامة وانحناء الزمكان ومعادلة E=mc² بواسطة خط إنتاج النماذج المتعددة",
+  },
+  {
+    label: "نطق صوتي: تحدث بصوت أينشتاين ونيوتن (Omega Voice)",
+    icon: Mic,
+    domain: "science_factual",
+    prompt: "تحدث بصوت أينشتاين واشرح لنا كيف يتمدد النسيج الكوني وانحناء الضوء حول الثقوب السوداء",
+  },
+  {
+    label: "فلسفة ومقارنة أديان ومعضلة الشر",
+    icon: Brain,
+    domain: "philosophy_theology",
+    prompt: "قارن بين الرؤية الفلسفية للشر والعدالة الإلهية في الإسلام والمسيحية، مع تفكيك أطروحات كانط ونيتشه وسارتر وحرية الإرادة.",
+  },
+  {
+    label: "مخطط بياني تفاعلي (Interactive Chart)",
+    icon: BarChart3,
+    domain: "math_logic",
+    prompt: "أنشئ مخططاً بيانياً تفاعلياً يقارن بين كفاءة وسرعة ودقة نماذج الذكاء الاصطناعي المختلفة في الاستدلال المعرفي.",
+  },
+  {
+    label: "توليد صورة فنية بالذكاء الاصطناعي",
+    icon: ImageIcon,
+    domain: "general",
+    prompt: "ولد صورة سينمائية فائقة الدقة 8K لمدينة ذكية مستقبلية بهندسة كونية وأضواء نيون أرجوانية وسماوات زرقاء متلألئة.",
+  },
+  {
+    label: "توليد فيديو متحرك تفاعلي (Motion Video)",
+    icon: Film,
+    domain: "science_factual",
+    prompt: "أنشئ فيديو سينمائي متحرك لحركة النجوم والمجرات وتدفق موجات الطاقة الكمومية في الفضاء السحيق.",
+  },
   {
     label: "برمجة وهندسة",
     icon: Code2,
@@ -69,18 +167,6 @@ const SAMPLE_PROMPTS = [
     domain: "general",
     prompt: "ما هي أحوال الطقس وتوقعات درجات الحرارة والرياح في الرياض والقاهرة اليوم؟",
   },
-  {
-    label: "أخبار وأحداث عالمية",
-    icon: Newspaper,
-    domain: "general",
-    prompt: "ما هي أبرز الأخبار العالمية وتطورات التكنولوجيا والذكاء الاصطناعي اليوم؟",
-  },
-  {
-    label: "رياضيات وتفاضل وتكامل (LaTeX)",
-    icon: Scale,
-    domain: "math_logic",
-    prompt: "حل المعادلة التفاضلية $$\\frac{dy}{dx} + 2y = e^{-x}$$ مع الشرط الأولي $y(0) = 1$ مع كتابة جميع الخطوات بصيغ LaTeX الرياضية الدقيقة.",
-  },
 ];
 
 export const ChatView: React.FC<ChatViewProps> = ({
@@ -88,22 +174,45 @@ export const ChatView: React.FC<ChatViewProps> = ({
   onOpenKernelWithResult,
   onOpenOptimizer,
 }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "welcome",
-      role: "assistant",
-      content: `مرحباً بك في **نظام أوميغا للذكاء الاصطناعي متعدد الخوادم (Omega AI Multi-Model Consensus System)**.
+  // Session management state
+  const [sessions, setSessions] = useState<ChatSession[]>(() => {
+    const loaded = loadSessions();
+    if (loaded.length > 0) return loaded;
+    const initial = createSession("محادثة جديدة");
+    return [initial];
+  });
 
-تم تفعيل منظومة القدرات المتكاملة وفق أعلى معايير الدقة:
-1. **صياغة معادلات الرياضيات والفيزياء بدقة (LaTeX & KaTeX)**: دعم كامل للمعادلات الخطية $E = mc^2$ والمعادلات الكبرى $$\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}$$ ومعادلات ميكانيكا الكم والنسبية.
-2. **المرجع الزمني الدقيق (Live Clock)**: معرفة حية بالوقت والتاريخ الهجري والميلادي ويوم الأسبوع.
-3. **تحميل وقراءة المستندات والملفات**: دعم إرفاق ملفات النصوص، البرمجة، والـ PDF والصور لتحليلها مباشرة عبر حوض النماذج.
-4. **الرصد الجوي والأخبار العالمية**: استعلام مباشر عن أحوال الطقس وآخر الأنباء العالمية.
-5. **فحص روابط التواصل ويوتيوب وفيسبوك**: استخراج وتلخيص محتوى الروابط والوسائط التفاعلية.
-6. **الدمج التوافقي الحقيقي**: اندماج دلالي بين خوادم Qwen 2.5، Llama 3.3، Google Gemini، DeepSeek R1، Claude، و GPT-4o.`,
-      timestamp: Date.now(),
-    },
-  ]);
+  const [activeSessionId, setActiveSessionId] = useState<string>(() => {
+    const loaded = loadSessions();
+    return loaded[0]?.id || "default";
+  });
+
+  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
+  const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
+
+  // Active messages
+  const activeSession = sessions.find((s) => s.id === activeSessionId) || sessions[0];
+  const [messages, setMessages] = useState<ChatMessage[]>(() => activeSession?.messages || []);
+
+  // Sync messages when activeSessionId changes
+  useEffect(() => {
+    const current = sessions.find((s) => s.id === activeSessionId);
+    if (current) {
+      setMessages(current.messages);
+    }
+  }, [activeSessionId]);
+
+  // Persist messages to active session whenever they change
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const title = generateSessionTitle(messages);
+    updateSession(activeSessionId, (s) => ({ ...s, messages, title }));
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === activeSessionId ? { ...s, messages, title, updatedAt: Date.now() } : s
+      )
+    );
+  }, [messages, activeSessionId]);
 
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
@@ -113,6 +222,51 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [savedMemorySuccess, setSavedMemorySuccess] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Voice & Speech State (Scientists, Celebrities, Documentaries)
+  const [selectedPersonaId, setSelectedPersonaId] = useState<string>("doc-arabic-fusha");
+  const [speedMultiplier, setSpeedMultiplier] = useState<number>(1.0);
+  const [autoSpeakResponses, setAutoSpeakResponses] = useState<boolean>(false);
+  const [isVoiceActive, setIsVoiceActive] = useState<boolean>(false);
+  const [currentSpeakingMessageId, setCurrentSpeakingMessageId] = useState<string | null>(null);
+  const [isVoiceDropdownOpen, setIsVoiceDropdownOpen] = useState<boolean>(false);
+  const [voiceCategoryFilter, setVoiceCategoryFilter] = useState<VoiceCategory>("scientists");
+
+  // 3D Avatar, Interactive Physics Sandbox, Tree of Thought, Notebooks, and Code Sandbox States
+  const [showProfessor3D, setShowProfessor3D] = useState<boolean>(true);
+  const [isProfessorFloating, setIsProfessorFloating] = useState<boolean>(true);
+  const [showInteractiveLab, setShowInteractiveLab] = useState<boolean>(false);
+  const [showTreeOfThought, setShowTreeOfThought] = useState<boolean>(false);
+  const [activeThoughtCase, setActiveThoughtCase] = useState<ProblemCase | null>(null);
+  const [showNotebookModal, setShowNotebookModal] = useState<boolean>(false);
+  const [showCodeSandbox, setShowCodeSandbox] = useState<boolean>(false);
+  const [showLiveVoiceModal, setShowLiveVoiceModal] = useState<boolean>(false);
+
+  // Direct Voice Interaction with Audio Frequency Analysis
+  const chatVoice = useVoiceInteraction({
+    lang: "ar-SA",
+    onInterimTranscript: (draft) => {
+      setInput(draft);
+    },
+    onFinalTranscript: (finalText) => {
+      setInput(finalText);
+    },
+  });
+
+  const currentPersona =
+    OMEGA_VOICE_PERSONAS.find((p) => p.id === selectedPersonaId) ||
+    OMEGA_VOICE_PERSONAS[0];
+
+  useEffect(() => {
+    const unsub = subscribeSpeechState((s) => {
+      setIsVoiceActive(s.isPlaying && !s.isPaused);
+      if (!s.isPlaying) {
+        setCurrentSpeakingMessageId(null);
+      }
+    });
+    return unsub;
+  }, []);
+
+  // Copy to clipboard helper
   const copyToClipboard = async (text: string, id: string) => {
     if (!text) return;
     try {
@@ -174,14 +328,487 @@ export const ChatView: React.FC<ChatViewProps> = ({
     setAttachments((prev) => prev.filter((a) => a.id !== id));
   };
 
+  // Start a fresh new chat session
+  const handleNewChat = () => {
+    const newSession = createSession("محادثة جديدة");
+    setSessions((prev) => [newSession, ...prev]);
+    setActiveSessionId(newSession.id);
+    setMessages(newSession.messages);
+    setInput("");
+    setAttachments([]);
+  };
+
+  // Switch to a previous session
+  const handleSelectSession = (id: string) => {
+    setActiveSessionId(id);
+    const target = sessions.find((s) => s.id === id);
+    if (target) {
+      setMessages(target.messages);
+    }
+  };
+
+  // Delete session
+  const handleDeleteSession = (id: string) => {
+    const { sessions: updated, nextActiveId } = deleteSession(id);
+    setSessions(updated);
+    if (activeSessionId === id) {
+      setActiveSessionId(nextActiveId);
+      const target = updated.find((s) => s.id === nextActiveId) || updated[0];
+      setMessages(target ? target.messages : []);
+    }
+  };
+
+  // Rename session
+  const handleRenameSession = (id: string, newTitle: string) => {
+    renameSession(id, newTitle);
+    setSessions((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, title: newTitle.trim() || s.title } : s))
+    );
+  };
+
+  // Clear all sessions
+  const handleClearAllSessions = () => {
+    const fresh = clearAllSessions();
+    setSessions(fresh);
+    setActiveSessionId(fresh[0].id);
+    setMessages(fresh[0].messages);
+  };
+
+  // Media Generation Handler
+  const handleGenerateMedia = async (data: {
+    type: "image" | "video" | "pipeline" | "voice";
+    prompt: string;
+    aspectRatio?: string;
+    style?: string;
+    videoModel?: string;
+    scientistId?: string;
+    pipelineMode?: "flagship" | "open_source";
+    tools?: Record<string, string>;
+    originalUserPrompt?: string;
+    voicePersonaId?: string;
+    voiceEngineId?: string;
+  }) => {
+    const userMsgId = `user-${Date.now()}`;
+    const asstMsgId = `asst-${Date.now()}`;
+
+    const userText =
+      data.originalUserPrompt ||
+      (data.type === "pipeline"
+        ? `طلب إنتاج فيديو علمي تعليمي (Pipeline): "${data.prompt}" (${data.pipelineMode === "open_source" ? "مفتوح المصدر بالكامل" : "أعلى جودة Flagship"})`
+        : data.type === "voice"
+        ? `طلب نطق صوتي ذكي بصوت أوميغا: "${data.prompt}"`
+        : data.type === "image"
+        ? `طلب توليد صورة: "${data.prompt}" (الأسلوب: ${data.style || "سينمائي"}، الأبعاد: ${data.aspectRatio || "16:9"})`
+        : `طلب توليد فيديو متحرك: "${data.prompt}" (النموذج: ${data.videoModel || "veo-google"}، الأسلوب: ${data.style || "سينمائي"})`);
+
+    // Add user request message and pending assistant message
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: userMsgId,
+        role: "user",
+        content: userText,
+        timestamp: Date.now(),
+      },
+      {
+        id: asstMsgId,
+        role: "assistant",
+        content:
+          data.type === "pipeline"
+            ? "جاري تشغيل خط إنتاج الفيديو العلمي متعدد النماذج (السيناريو ← البورتريه ← توليد الحركة ← تحريك الملامح ← مزامنة الشفاه ← استنساخ الصوت والمونتاج والشارة)..."
+            : data.type === "voice"
+            ? "جاري تهيئة المحرك الصوتي واستدعاء النبرة الصوتية المطلوبة..."
+            : data.type === "image"
+            ? "جاري استدعاء محرك التوليد البصري الفائق ورسم المشهد بدقة سينمائية 8K..."
+            : "جاري استدعاء محرك الفيديو السينمائي ومحاكاة المشهد التفاعلي...",
+        timestamp: Date.now(),
+        isFusing: true,
+      },
+    ]);
+
+    try {
+      if (data.type === "voice") {
+        const persona =
+          OMEGA_VOICE_PERSONAS.find((p) => p.id === (data.voicePersonaId || selectedPersonaId)) ||
+          OMEGA_VOICE_PERSONAS[0];
+        const engine =
+          OMEGA_VOICE_ENGINES[data.voiceEngineId || persona.recommendedEngine] ||
+          OMEGA_VOICE_ENGINES.elevenlabs;
+
+        setSelectedPersonaId(persona.id);
+        setCurrentSpeakingMessageId(asstMsgId);
+
+        speakWithOmega(data.prompt, {
+          personaId: persona.id,
+          rate: speedMultiplier,
+          onEnd: () => setCurrentSpeakingMessageId(null),
+          onError: () => setCurrentSpeakingMessageId(null),
+        });
+
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === asstMsgId
+              ? {
+                  ...m,
+                  content:
+                    `### 🎙️ محاكاة ونطق صوتي مباشر (Omega Voice Synthesis)\n\n` +
+                    `• **الشخصية والنبرة:** ${persona.avatarEmoji} **${persona.nameAr}** (${persona.nameEn})\n` +
+                    `• **برنامج / محرك التوليد:** \`${engine.name}\` (${engine.company}) — *${engine.badge}*\n` +
+                    `• **الفئة:** ${persona.titleAr}\n` +
+                    `• **الاستجابة وجودة الإلقاء:** ${engine.latency} • تقييم: **${engine.qualityRating}**\n\n` +
+                    `> «${data.prompt}»\n\n` +
+                    `🔊 **أوميغا يتكلم الآن بنبرة ${persona.nameAr}!** يمكنك التحكم في مستوى الصوت وسرعة الإلقاء والإيقاف المؤقت من خلال شريط الصوت أدناه.`,
+                  isFusing: false,
+                }
+              : m
+          )
+        );
+        return;
+      }
+      if (data.type === "pipeline") {
+        const endpoint = "/api/omega/pipeline/generate";
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            topic: data.prompt,
+            scientistId: data.scientistId || "newton",
+            mode: data.pipelineMode || "flagship",
+            tools: data.tools || {},
+          }),
+        });
+
+        const json = await res.json();
+        if (!res.ok || !json.ok) {
+          throw new Error(json.error || "فشل خط إنتاج الفيديو العلمي");
+        }
+
+        const pData = json.pipeline || {};
+        const sc = pData.scientist || {};
+        const script = pData.script || {};
+        const trace = pData.executionTrace || [];
+
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === asstMsgId
+              ? {
+                  ...m,
+                  content:
+                    `### 🔬 خط إنتاج الفيديو العلمي والتعليمي المتكامل (Scientific Video Pipeline)\n\n` +
+                    `تمت محاكاة وهندسة الإنتاج العلمي المتكامل بنجاح للعالم الجليل **${sc.nameAr || "العالم"} (${sc.nameEn || ""})** لشرح موضوع: **«${pData.topic}»**.\n\n` +
+                    `• **العصر التاريخي:** ${sc.era || ""}\n` +
+                    `• **التخصص العلمي:** ${sc.specialtyAr || ""}\n` +
+                    `• **المعادلة الفيزيائية الحاكمة:** $$${script.keyEquation || sc.keyEquation || ""}$$\n` +
+                    `• **توليفة الأدوات:** ${pData.mode === "open_source" ? "مفتوحة المصدر 100% ومحلية (Wan 2.2 + Qwen 2.5 + LivePortrait + MuseTalk + XTTS v2 + FFmpeg)" : "أعلى جودة سينمائية Flagship (Veo + Runway + FLUX.1 + ElevenLabs + Sync Labs)"}\n\n` +
+                    `> ⚠️ **ميثاق الشفافية والأمانة العلمية الصارم:** ${pData.disclaimer || "إعادة تمثيل ومحاكاة علمية بالذكاء الاصطناعي وليست تسجيلاً حقيقياً • AI Educational Simulation (Non-Authentic Historical Re-enactment)"}\n\n` +
+                    `#### 🎬 ملخص المشاهد وسيناريو الشرح:\n` +
+                    (script.scenes || [])
+                      .map(
+                        (s: any, i: number) =>
+                          `**المشهد ${i + 1}: ${s.title}** (${s.duration || 6} ثوانٍ)\n` +
+                          `• *الحوار:* «${s.voiceLine || ""}»\n` +
+                          `• *الفيزياء وحركة الكاميرا:* ${s.cameraMotion || ""} — ${s.physicsInteraction || ""}`
+                      )
+                      .join("\n\n") +
+                    `\n\n#### ⚡ سجل تنفيذ خط الإنتاج (Pipeline Execution Trace):\n` +
+                    `| المرحلة | النموذج والأداة | الحالة | زمن المعالجة |\n` +
+                    `|---|---|---|---|\n` +
+                    trace
+                      .map(
+                        (t: any) =>
+                          `| ${t.stageNameAr} | \`${t.tool}\` | ✅ ${t.status} | ${t.durationMs}ms |`
+                      )
+                      .join("\n") +
+                    `\n\nيمكنك تشغيل واستعراض الفيديو المحاكى، والتنقل بين المشاهد والتحكم في السرعة وعرض المخطط من خلال المشغل أدناه:`,
+                  isFusing: false,
+                  mediaPayload: {
+                    type: "pipeline",
+                    prompt: data.prompt,
+                    style: data.style,
+                    videoData: pData.videoData,
+                    pipelineData: pData,
+                  },
+                }
+              : m
+          )
+        );
+        return;
+      }
+
+      const endpoint =
+        data.type === "image" ? "/api/omega/generate-image" : "/api/omega/generate-video";
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: data.prompt,
+          aspectRatio: data.aspectRatio,
+          style: data.style,
+          videoModel: data.videoModel || "veo-google",
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error || "فشل التوليد البصري");
+      }
+
+      if (data.type === "image") {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === asstMsgId
+              ? {
+                  ...m,
+                  content: `### 🎨 نتيجة التوليد البصري الفائق (Omega Visual Synthesis):\n\nتم توليد الصورة بنجاح استجابةً للوصف: «${data.prompt}» بأبعاد **${data.aspectRatio}** وأسلوب **${data.style}**.\n\nيمكنك استعراض وتنزيل الصورة مباشرة من البطاقة البصرية أدناه:`,
+                  isFusing: false,
+                  mediaPayload: {
+                    type: "image",
+                    url: json.imageUrl,
+                    prompt: data.prompt,
+                    aspectRatio: data.aspectRatio,
+                    style: data.style,
+                    provider: json.provider,
+                  },
+                }
+              : m
+          )
+        );
+      } else {
+        const vData = json.videoData || {};
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === asstMsgId
+              ? {
+                  ...m,
+                  content: `### 🎬 مقطع الفيديو الحركي التفاعلي — محرك **${vData.modelName || "Veo (Google)"}**\n\n` +
+                    `• **النموذج:** ${vData.modelName || "Veo (Google)"} (${vData.modelProvider || "Google DeepMind"})\n` +
+                    `• **الميزة الأساسية:** ${vData.modelTagline || "من أقوى مولدات الفيديو الواقعية"}\n` +
+                    `• **الدقة ومعدل الإطارات:** ${vData.resolution || "1080p / 4K"} • ${vData.fps || 60}fps • تقييم الفيزياء: **${vData.physicsRating || "9.9/10"}**\n\n` +
+                    `تمت محاكاة المشهد الحركي بنجاح استجابةً لسيناريو: «${data.prompt}». يمكنك تشغيل المشهد، والتبديل بحرية بين نماذج الفيديو السبعة مباشرة من داخل المشغل:`,
+                  isFusing: false,
+                  mediaPayload: {
+                    type: "video",
+                    prompt: data.prompt,
+                    style: data.style,
+                    videoData: vData,
+                  },
+                }
+              : m
+          )
+        );
+      }
+    } catch (err: any) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === asstMsgId
+            ? {
+                ...m,
+                content: `حدث خطأ أثناء توليد الوسائط: ${err.message || "فشل غير متوقع"}. يرجى المحاولة مجدداً.`,
+                isFusing: false,
+              }
+            : m
+        )
+      );
+    }
+  };
+
+  // Main chat sending handler
   const handleSend = async (promptToSend?: string, filesToSend?: ChatAttachment[]) => {
     const text = (promptToSend ?? input).trim();
     const currentAttachments = filesToSend ?? attachments;
 
     if ((!text && currentAttachments.length === 0) || isProcessing) return;
 
+    // Check if user specifically requested a scientific educational video pipeline (Newton, Einstein, etc.)
+    const isFreeFallPrompt =
+      /سقوط.*شاقولي|شاقولي.*سقوط|السقوط.*الحر|سقوط.*حر|free\s*fall|freefall/i.test(text) ||
+      (text.includes("نيوتن") && (text.includes("سقوط") || text.includes("شاقولي") || text.includes("جاذبية") || text.includes("تفاحة")));
+
+    const isPipelineDirectPrompt =
+      isFreeFallPrompt ||
+      (/\b(خط إنتاج|خط انتاج|pipeline|محاكاة علمية|فيديو علمي|فيديو تعليمي)\b/i.test(text) &&
+        /\b(نيوتن|أينشتاين|تيسلا|كوري|ابن الهيثم|الهيثم|فاينمان|newton|einstein|tesla|curie|feynman)\b/i.test(text)) ||
+      (/\b(أنتج فيديو|انشئ فيديو|أنشئ فيديو|اصنع فيديو|فيديو|محاكاة|توليد فيديو|ولد فيديو)\b/i.test(text) &&
+        /\b(يشرح|شرح|توضيح|تفسير|نيوتن|أينشتاين|تيسلا|ابن الهيثم|ماري كوري|فاينمان|الجاذبية|النسبية|السقوط)\b/i.test(text)) ||
+      /^(نيوتن يشرح|أينشتاين يشرح|تيسلا يشرح|ابن الهيثم يشرح|ماري كوري تشرح|فاينمان يشرح)/i.test(text);
+
+    if (isPipelineDirectPrompt) {
+      let scientistId = "newton";
+      if (/أينشتاين|einstein/i.test(text)) scientistId = "einstein";
+      else if (/تيسلا|tesla/i.test(text)) scientistId = "tesla";
+      else if (/ابن الهيثم|الهيثم|ibn/i.test(text)) scientistId = "ibn_al_haytham";
+      else if (/كوري|curie/i.test(text)) scientistId = "curie";
+      else if (/فاينمان|feynman/i.test(text)) scientistId = "feynman";
+
+      const pipelineMode = /(مفتوح المصدر|مفتوحة المصدر|open source|wan|hunyuan|محلي|local)/i.test(text)
+        ? "open_source"
+        : "flagship";
+
+      // Clean prompt of meta-instructions or complaint phrases like "عندما اطلب... يظهر فيديو لا علاقة..."
+      let cleanTopic = text
+        .replace(/^(يرجى\s+|من فضلك\s+|لو سمحت\s+|ممكن\s+|أرجو\s+|اريد منك\s+|أريد منك\s+|نريد\s+|قم بـ\s+|قم\s+|عندما اطلب\s+|عندما أطلب\s+)/i, "")
+        .replace(/^(أنتج فيديو|انشئ فيديو|أنشئ فيديو|اصنع فيديو|فيديو علمي|فيديو تعليمي|فيديو متحرك|فيديو|محاكاة علمية|محاكاة|خط إنتاج|خط انتاج|pipeline)[:\s]*/i, "")
+        .replace(/(،|\.|-)\s*(يضهر|يظهر|يطلع|طلع|بيظهر)\s+فيديو.*$/i, "")
+        .trim();
+
+      if (isFreeFallPrompt) {
+        cleanTopic = "قانون نيوتن للسقوط الشاقولي الحر للكتل وتسارع الجاذبية P=mg";
+        scientistId = "newton";
+      } else if (!cleanTopic) {
+        cleanTopic = text;
+      }
+
+      setInput("");
+      handleGenerateMedia({
+        type: "pipeline",
+        prompt: cleanTopic,
+        scientistId,
+        pipelineMode,
+        originalUserPrompt: text,
+      });
+      return;
+    }
+
+    // Check if user specifically requested a direct voice synthesis prompt (e.g. "تكلم يا اوميغا", "تحدث بصوت نيوتن", "اقرأ بصوت...")
+    const isDirectVoiceCommand =
+      /^(تكلم يا اوميغا|تحدث يا اوميغا|تكلم يا أوميغا|تحدث يا أوميغا|تكلم بالصوت|تحدث بالصوت|انطق بصوت|نطق بصوت|شغل صوت|اقرأ بصوت|تكلم بصوت|تحدث بصوت|سمعني صوت|تحدث معي|تكلم معي)/i.test(text);
+
+    if (isDirectVoiceCommand) {
+      let targetPersonaId = selectedPersonaId;
+      if (/نيوتن|newton/i.test(text)) targetPersonaId = "newton";
+      else if (/أينشتاين|اينشتاين|einstein/i.test(text)) targetPersonaId = "einstein";
+      else if (/مورغان|فريمان|morgan/i.test(text)) targetPersonaId = "morgan-freeman";
+      else if (/أتينبورو|ديفيد|attenborough/i.test(text)) targetPersonaId = "david-attenborough";
+      else if (/وثائقي|ناشيونال|documentary/i.test(text)) targetPersonaId = "doc-arabic-fusha";
+      else if (/تيسلا|تسلا|tesla/i.test(text)) targetPersonaId = "tesla";
+      else if (/ابن الهيثم|هيثم/i.test(text)) targetPersonaId = "ibn-al-haytham";
+      else if (/فاينمان|feynman/i.test(text)) targetPersonaId = "feynman";
+      else if (/كوري|curie/i.test(text)) targetPersonaId = "curie";
+      else if (/تايسون|tyson/i.test(text)) targetPersonaId = "neil-tyson";
+      else if (/ساغان|sagan/i.test(text)) targetPersonaId = "carl-sagan";
+      else if (/ستيف|جوبز|jobs/i.test(text)) targetPersonaId = "steve-jobs";
+
+      let cleanPrompt = text
+        .replace(/^(تكلم يا اوميغا|تحدث يا اوميغا|تكلم يا أوميغا|تحدث يا أوميغا|تكلم بالصوت|تحدث بالصوت|انطق بصوت|نطق بصوت|شغل صوت|اقرأ بصوت|تكلم بصوت|تحدث بصوت|سمعني صوت|تحدث معي|تكلم معي)\s*[:،-]?\s*/i, "")
+        .trim();
+
+      if (!cleanPrompt) {
+        cleanPrompt = "مرحباً بك! أنا نظام أوميغا المعرفي، والآن أمتلك القدرة الكاملة على الكلام ونطق المعرفة والتفاعل الصوتي بنبرات العلماء الكبار والمشاهير ورواد الأفلام الوثائقية العالمية.";
+      }
+
+      setInput("");
+      handleGenerateMedia({
+        type: "voice",
+        prompt: cleanPrompt,
+        voicePersonaId: targetPersonaId,
+        originalUserPrompt: text,
+      });
+      return;
+    }
+
+    // Check if user specifically requested a video
+    const isVideoDirectPrompt =
+      /\b(توليد فيديو|ولد فيديو|ولد لي فيديو|انشئ فيديو|إنشاء فيديو|فيديو متحرك|صمم فيديو|اعمل فيديو|مقطع فيديو متحرك|مقطع فيديو)\b/i.test(text) ||
+      /\b(generate video|create video|make a video|animate video|video of|motion video)\b/i.test(text);
+
+    // Check if user specifically requested an image or drawing
+    const isImageDirectPrompt =
+      !isVideoDirectPrompt &&
+      (/\b(رسم صورة|ارسم صورة|ارسم لي|ارسم|توليد صورة|ولد صورة|ولد لي صورة|انشئ صورة|إنشاء صورة|صمم صورة|صمم لي صورة|اعمل صورة|اعمل لي صورة|أريد صورة|اريد صورة|أريد رسم|اريد رسم|صورة لـ|صورة عن|اعطني صورة|طلع لي صورة)\b/i.test(text) ||
+        /\b(draw a|draw an|draw me|draw|paint a|paint me|paint|generate an image|generate image|create an image|create image|illustration of|artwork of|sketch a|render an image|picture of)\b/i.test(text) ||
+        /(رسم|ارسم)\s+(لي\s+)?(صورة|شخصية|مشهد|منظر|قلعة|ساحر|فارس|تنين|مدينة|طبيعة|وحش|رجل|امرأة)/i.test(text));
+
+    if (isImageDirectPrompt) {
+      let cleanPrompt = text
+        .replace(/^(يرجى\s+|من فضلك\s+|لو سمحت\s+|ممكن\s+|أرجو\s+|اريد منك\s+|أريد منك\s+|نريد\s+|قم بـ\s+|قم\s+)/i, "")
+        .replace(/^(رسم صورة لـ|رسم صورة|ارسم لي صورة لـ|ارسم لي صورة|ارسم صورة لـ|ارسم صورة|ارسم لي|ارسم|توليد صورة لـ|توليد صورة|ولد لي صورة لـ|ولد لي صورة|ولد صورة لـ|ولد صورة|انشئ صورة لـ|انشئ صورة|إنشاء صورة لـ|إنشاء صورة|صمم صورة لـ|صمم صورة|صمم لي صورة لـ|صمم لي صورة|اعمل صورة لـ|اعمل صورة|اعمل لي صورة لـ|اعمل لي صورة|أريد صورة لـ|أريد صورة|اريد صورة لـ|اريد صورة|أريد رسم صورة لـ|أريد رسم صورة|أريد رسم|اريد رسم|صورة لـ|صورة عن|اعطني صورة|طلع لي صورة|draw a picture of|draw an image of|draw me a|draw me|draw|paint a picture of|paint me|paint|generate an image of|generate image of|generate image|create an image of|create image of|create image|illustration of|artwork of|picture of)[:\s]*/i, "")
+        .trim();
+
+      if (!cleanPrompt) cleanPrompt = text;
+
+      // Smart aesthetic style detection based on keywords
+      let selectedStyle = "سينمائي واقعي (Cinematic 8K)";
+      if (/(ساحر|شرير|قلعة|ظلام|وحش|تنين|فانتازيا|أسطوري|dark|evil|wizard|witch|castle|dragon|fantasy|gothic|demon)/i.test(text)) {
+        selectedStyle = "فانتازيا داكنة وسينمائية (Dark Fantasy 8K)";
+      } else if (/(أنمي|مانغا|كرتون|رسوم متحركة|anime|manga)/i.test(text)) {
+        selectedStyle = "أنمي فني ياباني (Anime Masterpiece)";
+      } else if (/(رقمي|سريالي|خيال علمي|مستقبل|سايبربانك|cyberpunk|sci-fi|futuristic)/i.test(text)) {
+        selectedStyle = "فن رقمي ثلاثي الأبعاد (3D Digital Art)";
+      }
+
+      setInput("");
+      handleGenerateMedia({
+        type: "image",
+        prompt: cleanPrompt,
+        aspectRatio: "16:9",
+        style: selectedStyle,
+        originalUserPrompt: text,
+      });
+      return;
+    }
+
+    if (isVideoDirectPrompt) {
+      let cleanPrompt = text
+        .replace(/^(يرجى\s+|من فضلك\s+|لو سمحت\s+|ممكن\s+|أرجو\s+|اريد منك\s+|أريد منك\s+|نريد\s+|قم بـ\s+|قم\s+)/i, "")
+        .replace(/^(توليد فيديو لـ|توليد فيديو|ولد لي فيديو لـ|ولد لي فيديو|ولد فيديو لـ|ولد فيديو|انشئ فيديو لـ|انشئ فيديو|إنشاء فيديو لـ|إنشاء فيديو|فيديو متحرك لـ|فيديو متحرك|صمم فيديو لـ|صمم فيديو|اعمل فيديو لـ|اعمل فيديو|مقطع فيديو متحرك لـ|مقطع فيديو لـ|مقطع فيديو|generate video of|generate video|create video of|create video|make a video of|make a video|video of)[:\s]*/i, "")
+        .trim();
+
+      if (!cleanPrompt) cleanPrompt = text;
+
+      // Smart video model detection from prompt
+      let detectedModel = "veo-google";
+      if (/\b(veo|فيو)\b/i.test(text)) {
+        detectedModel = "veo-google";
+      } else if (/\b(runway|رنواي|gen-?4|gen4)\b/i.test(text)) {
+        detectedModel = "runway-gen4";
+      } else if (/\b(luma|لوما|dream machine)\b/i.test(text)) {
+        detectedModel = "luma-dream-machine";
+      } else if (/\b(pika|بيكا)\b/i.test(text)) {
+        detectedModel = "pika";
+      } else if (/\b(pixverse|بيكس فيرس|بيكسفيرس)\b/i.test(text)) {
+        detectedModel = "pixverse-ai";
+      } else if (/\b(wan|وان|alibaba)\b/i.test(text)) {
+        detectedModel = "wan-2-2-alibaba";
+      } else if (/\b(hunyuan|هونيوان|tencent)\b/i.test(text)) {
+        detectedModel = "hunyuan-video-tencent";
+      }
+
+      setInput("");
+      handleGenerateMedia({
+        type: "video",
+        prompt: cleanPrompt,
+        aspectRatio: "16:9",
+        style: "حركي ديناميكي (Dynamic Motion)",
+        videoModel: detectedModel,
+        originalUserPrompt: text,
+      });
+      return;
+    }
+
     const userMessageId = `user-${Date.now()}`;
     const assistantMessageId = `asst-${Date.now()}`;
+
+    // Check if voice synthesis is explicitly requested or mentioned in the prompt
+    const isVoiceExplicitQuery =
+      /(اضف برامج الاصوات|برامج الاصوات|اصوات العلماء|اصوات المشاهير|اصوات الافلام الوثائيقية|اصوات الافلام الوثائقية|القدرة على الكلام|تكلم يا اوميغا|تحدث يا اوميغا|تكلم يا أوميغا|تحدث يا أوميغا|تكلم بصوت|تحدث بصوت|اقرأ بصوت|نطق بصوت|شغل صوت|voice programs|speak with omega|تحدث معي|تكلم معي|صوتك|تكلم)/i.test(text);
+
+    let personaForThis = selectedPersonaId;
+    if (/نيوتن|newton/i.test(text)) personaForThis = "newton";
+    else if (/أينشتاين|اينشتاين|einstein/i.test(text)) personaForThis = "einstein";
+    else if (/مورغان|فريمان|morgan/i.test(text)) personaForThis = "morgan-freeman";
+    else if (/أتينبورو|ديفيد|attenborough/i.test(text)) personaForThis = "david-attenborough";
+    else if (/وثائقي|ناشيونال|documentary/i.test(text)) personaForThis = "doc-arabic-fusha";
+    else if (/تيسلا|تسلا|tesla/i.test(text)) personaForThis = "tesla";
+    else if (/ابن الهيثم|هيثم/i.test(text)) personaForThis = "ibn-al-haytham";
+    else if (/فاينمان|feynman/i.test(text)) personaForThis = "feynman";
+    else if (/كوري|curie/i.test(text)) personaForThis = "curie";
+    else if (/تايسون|tyson/i.test(text)) personaForThis = "neil-tyson";
+    else if (/ساغان|sagan/i.test(text)) personaForThis = "carl-sagan";
+    else if (/ستيف|جوبز|jobs/i.test(text)) personaForThis = "steve-jobs";
+
+    if (personaForThis !== selectedPersonaId) {
+      setSelectedPersonaId(personaForThis);
+    }
 
     const userMsgContent = text || "يرجى تحليل وفحص المستندات المرفقة واستخلاص النتائج.";
 
@@ -213,7 +840,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
     setCurrentStep("توجيه المجال المعرفي واختيار النماذج...");
 
     try {
-      // Build history
+      // Recall past context from previous conversations if relevant
+      const pastContext = findRelevantPastContext(userMsgContent, activeSessionId);
+      const contextualPrompt = pastContext
+        ? `[تذكّر من محادثات سابقة ذات صلة: "${pastContext}"]\n\n${userMsgContent}`
+        : userMsgContent;
+
+      // Build recent history for fusion
       const history = newMessages
         .filter((m) => m.role === "user" || m.role === "assistant")
         .slice(-6)
@@ -222,7 +855,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
           content: m.content,
         }));
 
-      const result = await fuseResponses(userMsgContent, history, {
+      const result = await fuseResponses(contextualPrompt, history, {
         directThreshold: config.directThreshold,
         uncertainSpread: config.uncertainSpread,
         temperature: config.temperature,
@@ -254,6 +887,17 @@ export const ChatView: React.FC<ChatViewProps> = ({
             : msg
         )
       );
+
+      // Trigger voice speech playback if auto-speak or voice explicit query
+      if ((autoSpeakResponses || isVoiceExplicitQuery) && result.finalText) {
+        setCurrentSpeakingMessageId(assistantMessageId);
+        speakWithOmega(result.finalText, {
+          personaId: personaForThis,
+          rate: speedMultiplier,
+          onEnd: () => setCurrentSpeakingMessageId(null),
+          onError: () => setCurrentSpeakingMessageId(null),
+        });
+      }
     } catch (err: any) {
       console.error("Fusion error:", err);
       setMessages((prev) =>
@@ -287,6 +931,342 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
   return (
     <div className="flex flex-col h-[calc(100vh-4.5rem)] max-w-6xl mx-auto w-full px-2 sm:px-4 py-2">
+      {/* Top Session & Action Bar */}
+      <div className="flex items-center justify-between gap-2 py-1.5 px-2 bg-slate-900/60 border border-slate-800 rounded-xl mb-2 text-xs">
+        <div className="flex items-center gap-2 overflow-hidden">
+          {/* New Chat Button */}
+          <button
+            type="button"
+            onClick={handleNewChat}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium shadow transition-all cursor-pointer shrink-0"
+            title="بدء صفحة محادثة جديدة"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>محادثة جديدة</span>
+          </button>
+
+          {/* Chat History Drawer Toggle */}
+          <button
+            type="button"
+            onClick={() => setIsHistoryDrawerOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all cursor-pointer shrink-0 border border-slate-700"
+            title="استعراض سجل المحادثات السابقة"
+          >
+            <History className="w-3.5 h-3.5 text-cyan-400" />
+            <span>سجل المحادثات</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-slate-700 text-[10px] text-slate-300 font-mono">
+              {sessions.length}
+            </span>
+          </button>
+
+          {/* Current Session Title */}
+          <div className="text-slate-400 text-xs truncate hidden md:block border-r border-slate-800 pr-2 mr-1">
+            <span className="text-slate-500">الجلسة:</span>{" "}
+            <span className="text-slate-200 font-medium">{activeSession?.title || "محادثة أوميغا"}</span>
+          </div>
+        </div>
+
+        {/* Voice & Media Studio Triggers */}
+        <div className="flex items-center gap-2">
+          {/* Omega Voice Hub Trigger */}
+          <button
+            type="button"
+            onClick={() => setIsVoiceDropdownOpen((prev) => !prev)}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold shadow transition-all cursor-pointer shrink-0 border ${
+              isVoiceActive
+                ? "bg-emerald-950/90 border-emerald-500 text-emerald-200 ring-1 ring-emerald-400/50 shadow-emerald-900/40"
+                : isVoiceDropdownOpen
+                ? "bg-purple-900/60 border-purple-500 text-purple-200"
+                : "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+            }`}
+            title="التحكم في صوت أوميغا: العلماء، المشاهير، الأفلام الوثائقية"
+          >
+            <Mic className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">صوت أوميغا:</span>
+            <span className="text-emerald-300 font-bold truncate max-w-[100px]">
+              {currentPersona.nameAr}
+            </span>
+            {isVoiceActive ? (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            ) : autoSpeakResponses ? (
+              <span className="text-[10px] px-1 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30">
+                تلقائي
+              </span>
+            ) : null}
+          </button>
+
+          {/* Interactive Physics Sandbox Trigger */}
+          <button
+            type="button"
+            onClick={() => setShowInteractiveLab((prev) => !prev)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 border ${
+              showInteractiveLab
+                ? "bg-cyan-950 border-cyan-400 text-cyan-200 ring-1 ring-cyan-400/40"
+                : "bg-slate-800 hover:bg-slate-700 text-cyan-300 border-slate-700"
+            }`}
+            title="فتح مختبر الفيزياء التفاعلي والرسوم البيانية اللحظية للسقوط الحر"
+          >
+            <Atom className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden sm:inline">مختبر الفيزياء</span>
+          </button>
+
+          {/* Tree of Thought Reasoning Engine Trigger */}
+          <button
+            type="button"
+            onClick={() => setShowTreeOfThought(true)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 border ${
+              showTreeOfThought
+                ? "bg-purple-950 border-purple-400 text-purple-200 ring-1 ring-purple-400/40"
+                : "bg-slate-800 hover:bg-slate-700 text-purple-300 border-slate-700"
+            }`}
+            title="شجرة التفكير والاستنتاج العلمي متعدد المسارات (Tree of Thought)"
+          >
+            <GitBranch className="w-3.5 h-3.5 text-purple-400" />
+            <span className="hidden sm:inline">شجرة الاستدلال</span>
+          </button>
+
+          {/* Omega Notebooks Trigger */}
+          <button
+            type="button"
+            onClick={() => setShowNotebookModal(true)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 border ${
+              showNotebookModal
+                ? "bg-amber-950 border-amber-400 text-amber-200 ring-1 ring-amber-400/40"
+                : "bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700"
+            }`}
+            title="دفاتر المحاضرات العلمية وشرائح العرض التفاعلية (Omega Notebooks)"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">دفاتر المحاضرات</span>
+          </button>
+
+          {/* Omega Code & Simulation Sandbox Trigger */}
+          <button
+            type="button"
+            onClick={() => setShowCodeSandbox(true)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 border ${
+              showCodeSandbox
+                ? "bg-emerald-950 border-emerald-400 text-emerald-200 ring-1 ring-emerald-400/40"
+                : "bg-slate-800 hover:bg-slate-700 text-emerald-300 border-slate-700"
+            }`}
+            title="منصة تشغيل الأكواد والحل العددي الرياضي (Code Sandbox)"
+          >
+            <Code2 className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">منصة الأكواد</span>
+          </button>
+
+          {/* Live Voice Interaction Room Trigger */}
+          <button
+            type="button"
+            onClick={() => setShowLiveVoiceModal(true)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 border ${
+              showLiveVoiceModal
+                ? "bg-cyan-950 border-cyan-400 text-cyan-200 ring-1 ring-cyan-400/40 shadow-cyan-950/60"
+                : "bg-slate-800 hover:bg-slate-700 text-cyan-300 border-slate-700"
+            }`}
+            title="بدء تفاعل صوتي مباشر مع أوميغا عبر الميكروفون مع تحليل التردد الصوتي الحي"
+          >
+            <Radio className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+            <span className="hidden sm:inline">تفاعل صوتي مباشر</span>
+            <span className="sm:hidden">صوت حي</span>
+          </button>
+
+          {/* 3D Professor Omega Avatar Trigger */}
+          <button
+            type="button"
+            onClick={() => setShowProfessor3D((prev) => !prev)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 border ${
+              showProfessor3D
+                ? "bg-cyan-950/90 border-cyan-400 text-cyan-200 ring-1 ring-cyan-400/40 shadow-cyan-950/60"
+                : "bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700"
+            }`}
+            title="إظهار / إخفاء شخصية البروفيسور أوميغا ثلاثية الأبعاد المتحركة"
+          >
+            <span className="text-sm">👨‍🔬</span>
+            <span className="hidden sm:inline">البروفيسور 3D</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+          </button>
+
+          {/* Media Generation Studio Modal Trigger */}
+          <button
+            type="button"
+            onClick={() => setIsMediaModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white font-medium shadow transition-all cursor-pointer shrink-0"
+            title="توليد الوسائط والأصوات بالذكاء الاصطناعي"
+          >
+            <Wand2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">استوديو الوسائط</span>
+            <span className="sm:hidden">استوديو</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Quick Voice Hub Popover Panel */}
+      {isVoiceDropdownOpen && (
+        <div
+          dir="rtl"
+          className="bg-slate-900/95 border border-purple-500/30 rounded-xl p-3 mb-2 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200 text-xs text-slate-200"
+        >
+          <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-800">
+            <div className="flex items-center gap-2">
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-sm border shadow-inner"
+                style={{
+                  backgroundColor: `${currentPersona.accentColor}20`,
+                  borderColor: currentPersona.accentColor,
+                }}
+              >
+                {currentPersona.avatarEmoji}
+              </div>
+              <div>
+                <span className="font-bold text-white ml-2">{currentPersona.nameAr}</span>
+                <span className="text-slate-400 text-[11px]">{currentPersona.titleAr}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Test Voice Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (isVoiceActive) {
+                    stopSpeaking();
+                  } else {
+                    speakWithOmega(currentPersona.sampleQuoteAr, {
+                      personaId: currentPersona.id,
+                      rate: speedMultiplier,
+                    });
+                  }
+                }}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer transition-all border ${
+                  isVoiceActive
+                    ? "bg-purple-950 border-purple-500 text-purple-200 animate-pulse"
+                    : "bg-emerald-600/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/30"
+                }`}
+              >
+                {isVoiceActive ? (
+                  <>
+                    <Square className="w-3 h-3 text-purple-400 fill-purple-400" />
+                    <span>إيقاف المعاينة</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-3 h-3 text-emerald-400 fill-emerald-400" />
+                    <span>تجربة نبرة الصوت</span>
+                  </>
+                )}
+              </button>
+
+              {/* Close panel */}
+              <button
+                type="button"
+                onClick={() => setIsVoiceDropdownOpen(false)}
+                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {/* Category Tabs */}
+          <div className="flex items-center gap-2 pt-2.5 pb-2">
+            {[
+              { id: "scientists" as VoiceCategory, label: "🔬 أصوات العلماء", count: 6 },
+              { id: "celebrities" as VoiceCategory, label: "🌟 المشاهير والرواد", count: 5 },
+              { id: "documentary" as VoiceCategory, label: "🌍 الرواة والوثائقيات", count: 4 },
+            ].map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setVoiceCategoryFilter(cat.id)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer ${
+                  voiceCategoryFilter === cat.id
+                    ? "bg-purple-600 text-white shadow-sm"
+                    : "bg-slate-800 text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {cat.label} ({cat.count})
+              </button>
+            ))}
+          </div>
+
+          {/* Personas Horizontal Scroll / Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 max-h-44 overflow-y-auto pr-1">
+            {OMEGA_VOICE_PERSONAS.filter((p) => p.category === voiceCategoryFilter).map((persona) => (
+              <button
+                key={persona.id}
+                type="button"
+                onClick={() => {
+                  setSelectedPersonaId(persona.id);
+                  speakWithOmega(`مرحباً بك، أنا ${persona.nameAr}.`, {
+                    personaId: persona.id,
+                    rate: speedMultiplier,
+                  });
+                }}
+                className={`flex items-center gap-2 p-2 rounded-lg border text-right transition-all cursor-pointer ${
+                  selectedPersonaId === persona.id
+                    ? "bg-purple-950/80 border-purple-400/80 text-white ring-1 ring-purple-400/40"
+                    : "bg-slate-950/50 border-slate-800/80 text-slate-300 hover:bg-slate-800/60 hover:border-slate-700"
+                }`}
+              >
+                <span className="text-lg">{persona.avatarEmoji}</span>
+                <div className="truncate flex-1 min-w-0">
+                  <div className="font-semibold text-xs truncate">{persona.nameAr}</div>
+                  <div className="text-[10px] text-slate-400 truncate">{persona.titleAr}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Bottom Settings: Auto-Speak toggle & Speed selector & Full Studio link */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 mt-2 border-t border-slate-800">
+            {/* Auto-Speak Toggle */}
+            <label className="flex items-center gap-2 cursor-pointer text-[11px]">
+              <input
+                type="checkbox"
+                checked={autoSpeakResponses}
+                onChange={(e) => setAutoSpeakResponses(e.target.checked)}
+                className="w-3.5 h-3.5 text-purple-600 rounded bg-slate-800 border-slate-700 focus:ring-purple-500 cursor-pointer"
+              />
+              <span className="font-medium text-slate-200">
+                قراءة جميع ردود أوميغا صوتياً وتلقائياً
+              </span>
+            </label>
+
+            {/* Speed selection */}
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] text-slate-400">السرعة:</span>
+              {[0.8, 1.0, 1.25, 1.5].map((speed) => (
+                <button
+                  key={speed}
+                  type="button"
+                  onClick={() => setSpeedMultiplier(speed)}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer transition-colors ${
+                    speedMultiplier === speed
+                      ? "bg-purple-600 text-white font-bold"
+                      : "bg-slate-800 text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  {speed}x
+                </button>
+              ))}
+            </div>
+
+            {/* Launch Full Studio */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsVoiceDropdownOpen(false);
+                setIsMediaModalOpen(true);
+              }}
+              className="text-[11px] text-pink-400 hover:text-pink-300 underline font-medium cursor-pointer"
+            >
+              فتح استوديو الأصوات المتقدم (6 محركات) ↗
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto space-y-4 pr-1 pl-1 pb-4">
         {messages.map((msg) => (
@@ -318,27 +1298,20 @@ export const ChatView: React.FC<ChatViewProps> = ({
               <div className="flex-1 space-y-2 overflow-hidden">
                 {/* User Attachments Display */}
                 {msg.attachments && msg.attachments.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-1 justify-end">
+                  <div className="flex flex-wrap gap-1.5">
                     {msg.attachments.map((att) => (
                       <div
                         key={att.id}
-                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-950/80 border border-purple-500/40 text-xs text-purple-200"
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300"
                       >
-                        {att.type === "image" ? (
-                          <ImageIcon className="w-3.5 h-3.5 text-pink-400" />
-                        ) : (
-                          <FileText className="w-3.5 h-3.5 text-cyan-400" />
-                        )}
+                        <FileText className="w-3.5 h-3.5 text-purple-400" />
                         <span className="max-w-[150px] truncate">{att.name}</span>
-                        <span className="text-[10px] text-purple-400 font-mono">
-                          ({Math.round(att.size / 1024)}KB)
-                        </span>
                       </div>
                     ))}
                   </div>
                 )}
 
-                {/* Message Bubble with MathRenderer */}
+                {/* Message Bubble */}
                 <div
                   className={`p-4 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words ${
                     msg.role === "user"
@@ -346,6 +1319,113 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       : "bg-slate-900/90 text-slate-100 rounded-tl-none border border-slate-800 shadow-xl"
                   }`}
                 >
+                  {/* Generated Media Payload Display (Images & Videos) */}
+                  {msg.mediaPayload && (
+                    <div className="mb-3 space-y-2">
+                      {msg.mediaPayload.type === "image" && msg.mediaPayload.url && (
+                        <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950/80 p-2">
+                          <div className="relative group rounded-lg overflow-hidden">
+                            <img
+                              src={msg.mediaPayload.url}
+                              alt={msg.mediaPayload.prompt}
+                              className="w-full max-h-96 object-contain rounded-lg bg-black/40"
+                              referrerPolicy="no-referrer"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3">
+                              <span className="text-xs text-slate-200 line-clamp-1">
+                                {msg.mediaPayload.prompt}
+                              </span>
+                              <a
+                                href={msg.mediaPayload.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                download="omega_generated_image.jpg"
+                                className="px-2.5 py-1 rounded bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-bold shrink-0 flex items-center gap-1 shadow cursor-pointer"
+                              >
+                                <Download className="w-3 h-3" />
+                                <span>تحميل</span>
+                              </a>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between text-[10px] text-slate-400 mt-2 px-1">
+                            <span>
+                              الأسلوب: {msg.mediaPayload.style || "سينمائي"} • الأبعاد:{" "}
+                              {msg.mediaPayload.aspectRatio || "16:9"}
+                            </span>
+                            <span className="text-purple-300 font-mono">Omega Visual Engine</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {(msg.mediaPayload.type === "video" || msg.mediaPayload.type === "pipeline") && (
+                        <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 p-1">
+                          <OmegaVideoPlayer
+                            prompt={msg.mediaPayload.prompt}
+                            videoData={msg.mediaPayload.videoData}
+                          />
+
+                          {/* Pipeline Visual Storyboard Strip */}
+                          {msg.mediaPayload.pipelineData?.storyboard &&
+                            msg.mediaPayload.pipelineData.storyboard.length > 0 && (
+                              <div className="p-3 bg-slate-950/90 border-t border-slate-800/80 mt-1 rounded-b-lg">
+                                <div className="flex items-center justify-between text-xs text-slate-300 font-bold mb-2">
+                                  <div className="flex items-center gap-1.5 text-purple-300">
+                                    <Workflow className="w-3.5 h-3.5 text-purple-400" />
+                                    <span>لوحة مشاهد خط الإنتاج البصري (Visual Storyboard):</span>
+                                  </div>
+                                  <span className="text-[10px] text-cyan-400 font-mono">
+                                    {msg.mediaPayload.pipelineData.storyboard.length} مشاهد مسلسلة
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                  {msg.mediaPayload.pipelineData.storyboard.map(
+                                    (sc: any, idx: number) => (
+                                      <div
+                                        key={sc.sceneId || idx}
+                                        className="rounded-lg overflow-hidden border border-slate-800 bg-slate-900 flex flex-col group"
+                                      >
+                                        <div className="relative aspect-video overflow-hidden bg-black/60">
+                                          <img
+                                            src={sc.imageUrl}
+                                            alt={sc.title}
+                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                            referrerPolicy="no-referrer"
+                                          />
+                                          <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/80 text-[9px] text-slate-200 font-mono">
+                                            المشهد {idx + 1}
+                                          </span>
+                                        </div>
+                                        <div className="p-1.5 text-[10px] text-slate-300 font-medium truncate">
+                                          {sc.title}
+                                        </div>
+                                      </div>
+                                    )
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                          {/* Quick Trigger for Interactive Sandbox & Live Kinematics */}
+                          <div className="flex items-center justify-between px-3 py-2 bg-cyan-950/40 border-t border-cyan-500/30 rounded-b-lg">
+                            <span className="text-[11px] text-cyan-300 flex items-center gap-1.5 font-medium">
+                              <Atom className="w-3.5 h-3.5 text-cyan-400" />
+                              <span>هل تريد تجربة السقوط وتغيير الجاذبية والكتلة بنفسك؟</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setShowInteractiveLab(true)}
+                              className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer shadow"
+                            >
+                              <Sliders className="w-3 h-3" />
+                              <span>فتح المختبر التفاعلي والرسوم البيانية</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Main text content with Math & Chart Renderer */}
                   {msg.isFusing ? (
                     <div className="py-2">
                       <SignalMeter isProcessing={true} stepDetails={currentStep} />
@@ -355,9 +1435,46 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   )}
                 </div>
 
-                {/* Assistant Actions Bar: Copy Answer */}
+                {/* Assistant Actions Bar: Copy Answer & Speak with Omega Voice */}
                 {msg.role === "assistant" && !msg.isFusing && (
-                  <div className="flex items-center gap-2 pt-1 px-1">
+                  <div className="flex items-center flex-wrap gap-2 pt-1 px-1">
+                    {/* Speak / Listen with Omega Voice */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (currentSpeakingMessageId === msg.id && isVoiceActive) {
+                          stopSpeaking();
+                          setCurrentSpeakingMessageId(null);
+                        } else {
+                          setCurrentSpeakingMessageId(msg.id);
+                          speakWithOmega(msg.content, {
+                            personaId: selectedPersonaId,
+                            rate: speedMultiplier,
+                            onEnd: () => setCurrentSpeakingMessageId(null),
+                            onError: () => setCurrentSpeakingMessageId(null),
+                          });
+                        }
+                      }}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer border shadow-sm ${
+                        currentSpeakingMessageId === msg.id && isVoiceActive
+                          ? "bg-purple-950/90 border-purple-500 text-purple-200 ring-1 ring-purple-400/50 shadow-purple-900/30 animate-pulse"
+                          : "bg-slate-900/80 border-slate-800 text-slate-300 hover:text-emerald-300 hover:bg-slate-800/90 hover:border-slate-700"
+                      }`}
+                      title="استماع للإجابة بصوت أوميغا والشخصية المختارة"
+                    >
+                      {currentSpeakingMessageId === msg.id && isVoiceActive ? (
+                        <>
+                          <Square className="w-3.5 h-3.5 text-purple-400 fill-purple-400" />
+                          <span>إيقاف القراءة</span>
+                        </>
+                      ) : (
+                        <>
+                          <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>استماع بالصوت ({currentPersona.avatarEmoji} {currentPersona.nameAr})</span>
+                        </>
+                      )}
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => copyToClipboard(msg.content, msg.id)}
@@ -366,7 +1483,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                           ? "bg-emerald-950/90 border-emerald-500/60 text-emerald-300 shadow-emerald-900/30"
                           : "bg-slate-900/80 border-slate-800 text-slate-400 hover:text-cyan-300 hover:bg-slate-800/90 hover:border-slate-700"
                       }`}
-                      title="نسخ الإجابة كاملة"
+                      title="نسخ الإجابة كاملة إلى الحافظة"
                     >
                       {copiedId === msg.id ? (
                         <>
@@ -394,7 +1511,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                           ? "text-emerald-300 font-medium"
                           : "text-purple-300/60 hover:text-purple-200"
                       }`}
-                      title="نسخ السؤال"
+                      title="نسخ نص السؤال"
                     >
                       {copiedId === msg.id ? (
                         <>
@@ -411,10 +1528,28 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   </div>
                 )}
 
-                {/* If Assistant response has FusionResult Telemetry */}
+                {/* Fusion Result Telemetry and Candidate Accordion */}
                 {msg.fusionResult && !msg.isFusing && (
                   <div className="space-y-2 mt-2">
-                    <SignalMeter result={msg.fusionResult} />
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <SignalMeter result={msg.fusionResult} />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const userQ =
+                            messages.find((m, i) => i === messages.indexOf(msg) - 1)?.content ||
+                            "استنتاج أوميغا";
+                          const thoughtCase = createThoughtTreeFromFusion(userQ, msg.fusionResult!);
+                          setActiveThoughtCase(thoughtCase);
+                          setShowTreeOfThought(true);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-purple-950/70 border border-purple-500/40 text-purple-200 hover:bg-purple-900/80 text-[11px] font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shrink-0"
+                        title="تتبع مسارات الاستدلال والتحقق من الفرضيات (Tree of Thought)"
+                      >
+                        <GitBranch className="w-3.5 h-3.5 text-purple-400" />
+                        <span>شجرة الاستدلال</span>
+                      </button>
+                    </div>
 
                     {/* Candidate Inspection Accordion */}
                     <div className="border border-slate-800/80 rounded-xl bg-slate-950/40 overflow-hidden text-xs">
@@ -429,7 +1564,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       >
                         <span className="flex items-center gap-1.5 font-medium">
                           <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                          المساهمات التكاملية للخوادم ({msg.fusionResult.candidates.length} خوادم تآزرية) وتفاصيل الاستنتاج
+                          المساهمات التكاملية للخوادم ({msg.fusionResult.candidates.length} خوادم تآزرية)
                         </span>
                         {expandedCandidateId === msg.id ? (
                           <ChevronUp className="w-4 h-4" />
@@ -447,69 +1582,34 @@ export const ChatView: React.FC<ChatViewProps> = ({
                             </span>
                           </div>
 
-                          {msg.fusionResult.candidates.map((cand, idx) => {
-                            const spec = OMEGA_MODELS[cand.modelId];
-                            return (
-                              <div
-                                key={`${cand.modelId}-${idx}`}
-                                className="p-2.5 rounded-lg border border-slate-800 bg-slate-900/60 space-y-1.5"
-                              >
-                                <div className="flex items-center justify-between flex-wrap gap-2">
-                                  <div className="flex items-center gap-1.5 font-mono text-[11px] text-slate-300">
-                                    <span
-                                      className="w-2 h-2 rounded-full"
-                                      style={{ backgroundColor: spec?.accentHex || "#a855f7" }}
-                                    />
-                                    <span className="font-bold">{spec?.name || cand.modelId}</span>
-                                    <span className="text-slate-500">#{idx + 1}</span>
-                                  </div>
-                                  <div className="flex items-center gap-3 font-mono text-[11px]">
-                                    <span className="text-cyan-400">
-                                      Ψ: {(cand.psi * 100).toFixed(1)}%
-                                    </span>
-                                    <span className="text-slate-400">
-                                      وزن: {(cand.weight * 100).toFixed(1)}%
-                                    </span>
-                                    {cand.delta !== undefined && (
-                                      <span className="text-slate-500 text-[10px]">
-                                        انحراف Δ: {cand.delta.toFixed(3)}
-                                      </span>
-                                    )}
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        copyToClipboard(
-                                          cand.text,
-                                          `cand-${cand.modelId}-${idx}`
-                                        )
-                                      }
-                                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] transition-all cursor-pointer border ${
-                                        copiedId === `cand-${cand.modelId}-${idx}`
-                                          ? "bg-emerald-950/70 border-emerald-500/50 text-emerald-300"
-                                          : "bg-slate-800/60 border-slate-700/60 text-slate-400 hover:text-cyan-300 hover:bg-slate-800"
-                                      }`}
-                                      title="نسخ مساهمة هذا الخادم"
-                                    >
-                                      {copiedId === `cand-${cand.modelId}-${idx}` ? (
-                                        <>
-                                          <Check className="w-3 h-3 text-emerald-400" />
-                                          <span>تم النسخ</span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Copy className="w-3 h-3" />
-                                          <span>نسخ المساهمة</span>
-                                        </>
-                                      )}
-                                    </button>
-                                  </div>
-                                </div>
-                                <div className="text-slate-300 text-[11px] leading-relaxed">
-                                  <MathRenderer content={cand.text} />
+                          {msg.fusionResult.candidates.map((cand, idx) => (
+                            <div
+                              key={idx}
+                              className="p-3 rounded-xl border border-slate-800 bg-slate-900/50 space-y-1.5"
+                            >
+                              <div className="flex items-center justify-between font-mono text-[11px] text-slate-300">
+                                <span className="font-bold text-cyan-400">
+                                  {cand.modelName} ({cand.provider})
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-purple-300">
+                                    معامل التوافق Ψ: {cand.psi.toFixed(3)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => copyToClipboard(cand.text, `${msg.id}-cand-${idx}`)}
+                                    className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800"
+                                    title="نسخ إجابة هذا النموذج"
+                                  >
+                                    <Copy className="w-3 h-3" />
+                                  </button>
                                 </div>
                               </div>
-                            );
-                          })}
+                              <div className="text-slate-300 text-[11px] leading-relaxed">
+                                <MathRenderer content={cand.text} />
+                              </div>
+                            </div>
+                          ))}
 
                           {/* Verification details */}
                           {msg.fusionResult.verification && (
@@ -522,23 +1622,36 @@ export const ChatView: React.FC<ChatViewProps> = ({
                                 <div className="text-slate-400 text-[11px] leading-relaxed">
                                   {msg.fusionResult.verification.critique}
                                 </div>
-                                {msg.fusionResult.verification.warnings.length > 0 && (
-                                  <div className="text-amber-400 text-[10px]">
-                                    تنبيهات: {msg.fusionResult.verification.warnings.join(" | ")}
-                                  </div>
-                                )}
                               </div>
                             </div>
                           )}
 
                           {/* Action links */}
-                          <div className="flex items-center justify-between pt-1 text-[11px]">
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px]">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const userQ =
+                                  messages.find((m, i) => i === messages.indexOf(msg) - 1)?.content ||
+                                  "استنتاج أوميغا";
+                                const thoughtCase = createThoughtTreeFromFusion(userQ, msg.fusionResult!);
+                                setActiveThoughtCase(thoughtCase);
+                                setShowTreeOfThought(true);
+                              }}
+                              className="inline-flex items-center gap-1 text-purple-400 hover:text-purple-300 font-semibold cursor-pointer"
+                              title="تتبع مسارات الاستدلال والفرضيات (Tree of Thought Visualizer)"
+                            >
+                              <GitBranch className="w-3.5 h-3.5 text-purple-400" />
+                              <span>فحص شجرة الاستدلال (Tree of Thought)</span>
+                            </button>
+
                             <button
                               type="button"
                               onClick={() =>
                                 handleSaveToMemory(
                                   msg.fusionResult!,
-                                  messages.find((m, i) => i === messages.indexOf(msg) - 1)?.content || "استنتاج أوميغا"
+                                  messages.find((m, i) => i === messages.indexOf(msg) - 1)?.content ||
+                                    "استنتاج أوميغا"
                                 )
                               }
                               className="inline-flex items-center gap-1 text-slate-400 hover:text-cyan-300 cursor-pointer"
@@ -551,7 +1664,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                               <button
                                 type="button"
                                 onClick={() => onOpenKernelWithResult(msg.fusionResult!)}
-                                className="inline-flex items-center gap-1 text-purple-400 hover:text-purple-300 cursor-pointer"
+                                className="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300 cursor-pointer"
                               >
                                 <Brain className="w-3.5 h-3.5" />
                                 فحص في مختبر نواة الحالة (Kernel Lab)
@@ -569,7 +1682,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
         ))}
       </div>
 
-      {/* Suggested prompts pills (shown when chat has few messages) */}
+      {/* Suggested prompts pills */}
       {messages.length <= 2 && (
         <div className="py-2">
           <div className="text-xs text-slate-400 mb-2 flex items-center justify-between">
@@ -588,7 +1701,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
               </button>
             )}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
             {SAMPLE_PROMPTS.map((p, idx) => {
               const Icon = p.icon;
               return (
@@ -620,6 +1733,41 @@ export const ChatView: React.FC<ChatViewProps> = ({
       {/* QUICK CAPABILITY TOOLBAR */}
       <div className="flex items-center gap-1.5 py-1.5 overflow-x-auto border-t border-slate-800/60 text-xs">
         <span className="text-[11px] text-slate-500 shrink-0 font-medium ml-1">أدوات أوميغا:</span>
+
+        {/* Real-time Voice Interaction Room Trigger */}
+        <button
+          type="button"
+          onClick={() => setShowLiveVoiceModal(true)}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-950/80 hover:bg-cyan-900/90 border border-cyan-500/50 text-cyan-200 hover:text-white transition-colors shrink-0 cursor-pointer shadow-sm"
+          title="تحدث مباشرة مع أوميغا بالصوت مع شاشة الترددات"
+        >
+          <Radio className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+          <span>تحدث بالصوت مباشرة</span>
+        </button>
+
+        {/* Media Generation Studio Trigger */}
+        <button
+          type="button"
+          onClick={() => setIsMediaModalOpen(true)}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-950/70 hover:bg-purple-900/90 border border-purple-500/40 text-purple-200 hover:text-white transition-colors shrink-0 cursor-pointer shadow-sm"
+        >
+          <Wand2 className="w-3.5 h-3.5 text-purple-400" />
+          <span>توليد صور وفيديو</span>
+        </button>
+
+        {/* Interactive Chart Generator Trigger */}
+        <button
+          type="button"
+          onClick={() =>
+            handleSend(
+              "أنشئ مخططاً بيانياً تفاعلياً (Chart) يوضح مقارنة إحصائية تفصيلية بالأعمدة ونسب الإنجاز والمؤشرات الرئيسية."
+            )
+          }
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 hover:text-cyan-300 transition-colors shrink-0 cursor-pointer"
+        >
+          <BarChart3 className="w-3.5 h-3.5 text-cyan-400" />
+          <span>مخطط بياني (Chart)</span>
+        </button>
 
         <button
           type="button"
@@ -672,10 +1820,61 @@ export const ChatView: React.FC<ChatViewProps> = ({
         <form
           onSubmit={(e) => {
             e.preventDefault();
+            if (chatVoice.isListening) {
+              chatVoice.stopListening();
+            }
             handleSend();
           }}
-          className="relative flex flex-col bg-slate-900 border border-slate-800 rounded-2xl shadow-xl focus-within:border-purple-500/60 focus-within:ring-1 focus-within:ring-purple-500/30 overflow-hidden"
+          className="relative flex flex-col bg-slate-900 border border-slate-800 rounded-2xl shadow-xl focus-within:border-cyan-500/60 focus-within:ring-1 focus-within:ring-cyan-500/30 overflow-hidden"
         >
+          {/* Active Microphone Audio Frequency Visualizer Header */}
+          {chatVoice.isListening && (
+            <div className="flex flex-col gap-1.5 p-3 bg-slate-950/95 border-b border-cyan-500/40 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 text-cyan-300 font-semibold">
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+                  <span>أوميغا يستمع إليك مباشرة عبر الميكروفون...</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-400/40 text-cyan-300 font-mono">
+                    تحليل الترددات الحية
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      chatVoice.stopListening();
+                      if (input.trim()) {
+                        handleSend();
+                      }
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-sm"
+                  >
+                    <Send className="w-3 h-3" />
+                    <span>إرسال فوري</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => chatVoice.stopListening()}
+                    className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] cursor-pointer transition-colors"
+                  >
+                    إلغاء
+                  </button>
+                </div>
+              </div>
+
+              {/* Real-time Frequency Spectrum Visualizer */}
+              <AudioFrequencyVisualizer
+                engine={chatVoice.frequencyEngine}
+                isActive={chatVoice.isListening}
+                mode="bars"
+                height={46}
+                barCount={32}
+                accentTheme="cyan"
+                showMetrics={true}
+              />
+            </div>
+          )}
+
           {/* Main Input Row */}
           <div className="flex items-center w-full">
             {/* Attachment Button */}
@@ -694,14 +1893,44 @@ export const ChatView: React.FC<ChatViewProps> = ({
               onChange={(e) => setInput(e.target.value)}
               disabled={isProcessing}
               placeholder={
-                isProcessing
+                chatVoice.isListening
+                  ? "تحدث الآن بوضوح في الميكروفون..."
+                  : isProcessing
                   ? "جاري معالجة إجماع أوميغا عبر الخوادم..."
-                  : "اطرح مسألة رياضية، معادلة فيزيائية، خبراً، أو استفساراً لاختبار الإجماع..."
+                  : "تكلم مع أوميغا بالصوت مباشرة أو اكتب مسألة علمية، صورة، معادلات، أو اطلب فيديو..."
               }
               className="w-full bg-transparent px-3 py-3.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none disabled:opacity-60"
             />
 
             <div className="flex items-center gap-1.5 pl-2 pr-3">
+              {/* Direct Microphone Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (chatVoice.isListening) {
+                    chatVoice.stopListening();
+                  } else {
+                    chatVoice.startListening();
+                  }
+                }}
+                className={`p-2 rounded-xl transition-all cursor-pointer border ${
+                  chatVoice.isListening
+                    ? "bg-red-600 hover:bg-red-500 text-white border-red-400 animate-pulse ring-2 ring-red-400/50 shadow-lg shadow-red-950/60"
+                    : "bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 border-slate-700"
+                }`}
+                title={
+                  chatVoice.isListening
+                    ? "إيقاف الاستماع الصوتي"
+                    : "تحدث مع أوميغا مباشرة عبر الميكروفون مع مؤشر التردد الصوتي"
+                }
+              >
+                {chatVoice.isListening ? (
+                  <MicOff className="w-4 h-4 text-white" />
+                ) : (
+                  <Mic className="w-4 h-4 text-cyan-400" />
+                )}
+              </button>
+
               <button
                 type="submit"
                 disabled={(!input.trim() && attachments.length === 0) || isProcessing}
@@ -714,10 +1943,20 @@ export const ChatView: React.FC<ChatViewProps> = ({
         </form>
 
         <div className="flex items-center justify-between mt-1.5 px-2 text-[10px] text-slate-500 font-mono">
-          <span>عتبة الإجماع: Ψ ≥ {config.directThreshold} | فارق الحيرة: ≤ {config.uncertainSpread}</span>
-          <span>معادلات LaTeX مفعّلة • توقيت دقيق • مستندات • خوادم مدمجة</span>
+          <span>
+            عتبة الإجماع: Ψ ≥ {config.directThreshold} | فارق الحيرة: ≤ {config.uncertainSpread}
+          </span>
+          <span>توليد أصوات العلماء والمشاهير والوثائقيات • خط إنتاج الفيديوهات العلمية • صور ومخططات</span>
         </div>
       </div>
+
+      {/* Persistent Floating Omega Voice Synthesizer Player */}
+      <OmegaVoicePlayer
+        selectedPersonaId={selectedPersonaId}
+        onSelectPersona={(id) => setSelectedPersonaId(id)}
+        speedMultiplier={speedMultiplier}
+        onChangeSpeed={(speed) => setSpeedMultiplier(speed)}
+      />
 
       {/* Advanced Capabilities Modal */}
       <OmegaCapabilityModal
@@ -727,6 +1966,103 @@ export const ChatView: React.FC<ChatViewProps> = ({
         onSelectTab={(tab) => setActiveCapabilityTab(tab)}
         onInjectPrompt={(text) => setInput(text)}
         onSendDirectly={(text) => handleSend(text)}
+      />
+
+      {/* Generative Media Studio Modal */}
+      <OmegaMediaModal
+        isOpen={isMediaModalOpen}
+        onClose={() => setIsMediaModalOpen(false)}
+        onSubmit={handleGenerateMedia}
+        onGenerate={handleGenerateMedia}
+      />
+
+      {/* Chat History & Previous Conversations Drawer */}
+      <ChatHistoryDrawer
+        isOpen={isHistoryDrawerOpen}
+        onClose={() => setIsHistoryDrawerOpen(false)}
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        onSelectSession={handleSelectSession}
+        onNewChat={handleNewChat}
+        onDeleteSession={handleDeleteSession}
+        onRenameSession={handleRenameSession}
+        onClearAll={handleClearAllSessions}
+      />
+
+      {/* 3D Animated Professor Omega Avatar */}
+      {showProfessor3D && (
+        <OmegaProfessor3D
+          isFloating={isProfessorFloating}
+          onCloseFloating={() => setShowProfessor3D(false)}
+          onSendMessage={(txt) => {
+            setInput(txt);
+            handleSend(txt);
+          }}
+        />
+      )}
+
+      {/* Interactive Physics Sandbox Modal */}
+      {showInteractiveLab && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto"
+          dir="rtl"
+        >
+          <div className="relative w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-2xl bg-slate-950 border border-cyan-500/50 shadow-2xl p-2 sm:p-4">
+            <button
+              type="button"
+              onClick={() => setShowInteractiveLab(false)}
+              className="absolute top-4 left-4 z-20 p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors cursor-pointer"
+              title="إغلاق المختبر"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <InteractivePhysicsLab />
+          </div>
+        </div>
+      )}
+
+      {/* Tree of Thought Reasoning Visualizer Modal */}
+      {showTreeOfThought && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto"
+          dir="rtl"
+        >
+          <div className="relative w-full max-w-5xl max-h-[92vh] overflow-y-auto rounded-2xl bg-slate-950 border border-purple-500/50 shadow-2xl p-2 sm:p-4">
+            <TreeOfThoughtVisualizer
+              customCase={activeThoughtCase}
+              onClose={() => {
+                setShowTreeOfThought(false);
+                setActiveThoughtCase(null);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Omega Scientific Notebook Presentation Modal */}
+      <OmegaNotebookModal
+        isOpen={showNotebookModal}
+        onClose={() => setShowNotebookModal(false)}
+      />
+
+      {/* Omega Code & Simulation Sandbox Modal */}
+      {showCodeSandbox && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto"
+          dir="rtl"
+        >
+          <div className="relative w-full max-w-5xl max-h-[92vh] overflow-y-auto rounded-2xl bg-slate-950 border border-emerald-500/50 shadow-2xl p-2 sm:p-4">
+            <OmegaCodeSandbox onClose={() => setShowCodeSandbox(false)} />
+          </div>
+        </div>
+      )}
+
+      {/* Real-Time Live Voice Interaction Room with Audio Frequency Visualizer */}
+      <LiveVoiceInteractionModal
+        isOpen={showLiveVoiceModal}
+        onClose={() => setShowLiveVoiceModal(false)}
+        onSendMessage={(text) => handleSend(text)}
+        initialPersonaId={selectedPersonaId}
       />
     </div>
   );

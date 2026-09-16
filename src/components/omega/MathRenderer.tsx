@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import katex from "katex";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, Download, ExternalLink } from "lucide-react";
+import { OmegaChart, type OmegaChartConfig } from "./OmegaChart";
 
 interface MathRendererProps {
   content: string;
@@ -72,6 +73,23 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
         const lines = part.slice(3, -3).trim().split("\n");
         const lang = lines[0]?.trim() || "";
         const code = (lang ? lines.slice(1) : lines).join("\n");
+
+        // Check if this is a chart specification
+        const isChartBlock =
+          lang.toLowerCase().includes("chart") ||
+          (lang.toLowerCase() === "json" && code.includes('"data"') && (code.includes('"series"') || code.includes('"type"')));
+
+        if (isChartBlock) {
+          try {
+            const parsedConfig = JSON.parse(code) as OmegaChartConfig;
+            if (parsedConfig && Array.isArray(parsedConfig.data) && parsedConfig.data.length > 0) {
+              return <OmegaChart key={`chart-${index}`} config={parsedConfig} />;
+            }
+          } catch {
+            // If JSON fails, render standard code block below
+          }
+        }
+
         return (
           <div
             key={`code-${index}`}
@@ -170,7 +188,57 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
                     );
                   }
 
-                  // Standard text: preserve bold, italic, and newlines
+                  // Standard text: check for markdown images ![alt](url)
+                  const imageRegex = /(!\[[^\]]*\]\([^\)]+\))/g;
+                  if (imageRegex.test(item)) {
+                    const imgParts = item.split(imageRegex);
+                    return (
+                      <span key={`img-group-${inlineIdx}`}>
+                        {imgParts.map((sub, sIdx) => {
+                          const match = sub.match(/^!\[(.*?)\]\((.*?)\)$/);
+                          if (match) {
+                            const altText = match[1] || "صورة مولدة بواسطة أوميغا";
+                            const imgUrl = match[2];
+                            return (
+                              <div
+                                key={`img-${inlineIdx}-${sIdx}`}
+                                className="my-3 rounded-2xl overflow-hidden border border-slate-800 bg-slate-950/90 p-2 shadow-2xl max-w-2xl"
+                              >
+                                <div className="relative group rounded-xl overflow-hidden bg-black/50">
+                                  <img
+                                    src={imgUrl}
+                                    alt={altText}
+                                    loading="lazy"
+                                    referrerPolicy="no-referrer"
+                                    className="w-full max-h-[480px] object-contain rounded-xl mx-auto transition-transform duration-300 group-hover:scale-[1.01]"
+                                  />
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3">
+                                    <span className="text-xs text-slate-200 line-clamp-1 font-medium">{altText}</span>
+                                    <a
+                                      href={imgUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      download="omega_visual_ai.jpg"
+                                      className="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-bold shrink-0 flex items-center gap-1 shadow cursor-pointer"
+                                    >
+                                      <Download className="w-3 h-3" />
+                                      <span>تحميل</span>
+                                    </a>
+                                  </div>
+                                </div>
+                                <div className="mt-2 px-1 text-[11px] text-slate-400 flex items-center justify-between">
+                                  <span className="line-clamp-1">{altText}</span>
+                                  <span className="text-[10px] text-purple-400 font-mono shrink-0">Omega Visual Synthesis</span>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return <span key={`sub-plain-${sIdx}`}>{sub}</span>;
+                        })}
+                      </span>
+                    );
+                  }
+
                   return <span key={`plain-${inlineIdx}`}>{item}</span>;
                 })}
               </span>

@@ -28,6 +28,17 @@ export interface ChatAttachment {
   previewUrl?: string;
 }
 
+export interface ChatMediaPayload {
+  type: "image" | "video" | "pipeline";
+  url?: string;
+  prompt: string;
+  aspectRatio?: string;
+  style?: string;
+  provider?: string;
+  videoData?: any;
+  pipelineData?: any;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "system";
@@ -36,6 +47,7 @@ export interface ChatMessage {
   attachments?: ChatAttachment[];
   fusionResult?: import("./fusion").FusionResult;
   isFusing?: boolean;
+  mediaPayload?: ChatMediaPayload;
   stepProgress?: {
     step: "routing" | "gathering" | "embedding" | "scoring" | "resolving" | "verifying";
     details?: string;

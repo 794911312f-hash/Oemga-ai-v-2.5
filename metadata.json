@@ -1,6 +1,6 @@
 {
   "name": "نظام أوميغا للذكاء الاصطناعي - Omega AI",
   "description": "نظام ذكاء اصطناعي فائق يعتمد على محرك الاندماج متعدد النماذج Omega V2 Fusion مع حسابات اليقين الرياضي والتضمينات الدلالية والتحقق الذاتي ونواة أوميغا المتطورة.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
