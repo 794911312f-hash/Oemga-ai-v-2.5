@@ -114,6 +114,8 @@ function generatePerspectiveResponse(modelId: ModelId, prompt: string): string {
         return `[خادم الحوسبة والرياضيات - Qwen 2.5]:\nاستجابةً لـ («${prompt}»):\nبالتحليل الخوارزمي الدقيق، تتحدد الشروط الحاكمة عبر صياغة رياضية محكمة تضمن كفاءة المعالجة وإزالة أي التباس اصطلاحي، مع تقديم الحل البنيوي الأقصر والأدق.`;
       case "llama-3-3-compat":
         return `[خادم المعالجة المفتوحة - Llama 3.3]:\nبالنظر في السؤال («${prompt}»):\nنقدم رؤية مباشرة ومرنة تركز على التطبيق العملي وتبسيط الفكرة دون التضحية بالعمق، مما يعزز الفهم الشامل ويوفر خطوات تنفيذية واضحة.`;
+      case "grok-compat":
+        return `[خادم الأخبار وشبكات التواصل - Grok (xAI)]:\nتحليل فوري حي لـ («${prompt}»):\nبرصد أحدث المستجدات ونبض منصة X وشبكات التواصل الاجتماعي، تتجه المعطيات الحالية نحو تأكيد الحقائق المباشرة بدون مواربة، مع الإحاطة السريعة بالسياق اللحظي والتريندات العالمية الأكثر تأثيراً.`;
       case "omega-kernel-c1":
       case "omega-kernel-c2":
         return `[إسقاط مصفوفي - Omega Kernel]:\nتم حساب مسقط فضاء الحالة للسؤال («${prompt}»)، وتكشف مصفوفة التقارب الدلالي عن تماسك المعنى حول المركز الهندسي بدقة عالية وانحراف معياري ضئيل، مما يؤكد صحة الفرضية التوافقية.`;
@@ -138,6 +140,8 @@ function generatePerspectiveResponse(modelId: ModelId, prompt: string): string {
       return `[Algorithmic Computation - Qwen 2.5]:\nAddressing "${prompt}": Applying structured algorithmic deduction and rigorous mathematical formulations to establish invariant constraints.`;
     case "llama-3-3-compat":
       return `[Open Synthesis - Llama 3.3]:\nRegarding "${prompt}": Delivering a versatile, direct perspective emphasizing operational clarity and cohesive execution.`;
+    case "grok-compat":
+      return `[Real-Time & Social Pulse - Grok (xAI)]:\nAnalyzing "${prompt}": Tracking live discourse, breaking updates, and social pulse across X. Delivering sharp, unfiltered, and factually grounded perspectives with real-time clarity.`;
     case "omega-kernel-c1":
     case "omega-kernel-c2":
       return `[State-Space Projection - Omega Kernel]:\nProjected state vector for "${prompt}" converges toward the semantic centroid with minimal delta variance and high spectral cohesion.`;

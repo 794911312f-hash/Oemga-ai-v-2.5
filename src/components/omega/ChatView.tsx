@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Send,
   Sparkles,
@@ -44,9 +44,12 @@ import {
   X,
   GitBranch,
   BookOpen,
+  Compass,
 } from "lucide-react";
 import type { ChatMessage, ChatAttachment } from "../../lib/omega/types";
 import { fuseResponses, type FusionResult } from "../../lib/omega/fusion";
+import { isOpenProblemQuery } from "../../lib/omega/exploratoryEngine";
+import { ExploratoryReasoningCard } from "./ExploratoryReasoningCard";
 import { SignalMeter } from "./SignalMeter";
 import { globalOmegaMemory } from "../../lib/omega/memory";
 import { globalOmegaLineage } from "../../lib/omega/lineage";
@@ -70,6 +73,37 @@ import {
   type VoicePersona,
   type VoiceCategory,
 } from "../../lib/omega/speech";
+
+class SafeBoundary extends React.Component<
+  { children: React.ReactNode; fallback?: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode; fallback?: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error("[SafeBoundary caught subcomponent render error]:", error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        this.props.fallback || (
+          <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-400 text-xs my-2">
+            عذراً، حدث استثناء طفيف في بطاقة العرض الجانبية ولكن الواجهة ومحادثتك تعمل بشكل كامل ومستمر.
+          </div>
+        )
+      );
+    }
+    return this.props.children;
+  }
+}
 import { OmegaMediaModal } from "./OmegaMediaModal";
 import { ChatHistoryDrawer } from "./ChatHistoryDrawer";
 import { OmegaVideoPlayer } from "./OmegaVideoPlayer";
@@ -175,43 +209,79 @@ export const ChatView: React.FC<ChatViewProps> = ({
   onOpenOptimizer,
 }) => {
   // Session management state
-  const [sessions, setSessions] = useState<ChatSession[]>(() => {
-    const loaded = loadSessions();
-    if (loaded.length > 0) return loaded;
-    const initial = createSession("محادثة جديدة");
-    return [initial];
+  const [sessions, setSessionsState] = useState<ChatSession[]>(() => {
+    try {
+      const loaded = loadSessions();
+      console.log(`[ChatView] Initializing sessions state with ${loaded?.length || 0} loaded sessions.`);
+      if (Array.isArray(loaded) && loaded.length > 0) return loaded;
+      const initial = createSession("محادثة جديدة");
+      return [initial];
+    } catch (err) {
+      console.error("[ChatView] Exception during initial sessions load:", err);
+      return [createSession("محادثة رئيسية")];
+    }
   });
 
+  // Guard setSessions so that sessions is NEVER set to null, undefined, or []
+  const setSessions = (action: React.SetStateAction<ChatSession[]>) => {
+    setSessionsState((prev) => {
+      const next = typeof action === "function" ? action(prev) : action;
+      if (!Array.isArray(next) || next.length === 0) {
+        console.warn("[ChatView] setSessions attempted to set empty/invalid sessions array. Preserving previous non-empty state.");
+        return prev && prev.length > 0 ? prev : [createSession("محادثة رئيسية")];
+      }
+      return next;
+    });
+  };
+
   const [activeSessionId, setActiveSessionId] = useState<string>(() => {
-    const loaded = loadSessions();
-    return loaded[0]?.id || "default";
+    try {
+      const loaded = loadSessions();
+      return loaded[0]?.id || "default";
+    } catch {
+      return "default";
+    }
   });
 
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
 
   // Active messages
-  const activeSession = sessions.find((s) => s.id === activeSessionId) || sessions[0];
+  const activeSession = (Array.isArray(sessions) && sessions.length > 0)
+    ? (sessions.find((s) => s && s.id === activeSessionId) || sessions[0])
+    : null;
+
   const [messages, setMessages] = useState<ChatMessage[]>(() => activeSession?.messages || []);
 
   // Sync messages when activeSessionId changes
   useEffect(() => {
-    const current = sessions.find((s) => s.id === activeSessionId);
-    if (current) {
+    console.log(`[ChatView] activeSessionId changed to: ${activeSessionId}`);
+    if (!activeSessionId || !Array.isArray(sessions)) return;
+    const current = sessions.find((s) => s && s.id === activeSessionId);
+    if (current && Array.isArray(current.messages)) {
+      console.log(`[ChatView] Switching messages to activeSessionId ${activeSessionId} (${current.messages.length} messages)`);
       setMessages(current.messages);
     }
   }, [activeSessionId]);
 
-  // Persist messages to active session whenever they change
+  // Persist messages to active session whenever messages change
+  const isFirstMountRef = useRef(true);
   useEffect(() => {
-    if (!activeSessionId) return;
-    const title = generateSessionTitle(messages);
-    updateSession(activeSessionId, (s) => ({ ...s, messages, title }));
-    setSessions((prev) =>
-      prev.map((s) =>
-        s.id === activeSessionId ? { ...s, messages, title, updatedAt: Date.now() } : s
-      )
-    );
+    if (isFirstMountRef.current) {
+      isFirstMountRef.current = false;
+      return;
+    }
+    if (!activeSessionId || !Array.isArray(messages)) return;
+    try {
+      console.log(`[ChatView] Persisting ${messages.length} messages for activeSessionId: ${activeSessionId}`);
+      const title = generateSessionTitle(messages);
+      const updatedSessions = updateSession(activeSessionId, (s) => ({ ...s, messages, title }));
+      if (Array.isArray(updatedSessions) && updatedSessions.length > 0) {
+        setSessions(updatedSessions);
+      }
+    } catch (err) {
+      console.error("[ChatView] Error persisting messages in useEffect:", err);
+    }
   }, [messages, activeSessionId]);
 
   const [input, setInput] = useState("");
@@ -237,6 +307,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [showInteractiveLab, setShowInteractiveLab] = useState<boolean>(false);
   const [showTreeOfThought, setShowTreeOfThought] = useState<boolean>(false);
   const [activeThoughtCase, setActiveThoughtCase] = useState<ProblemCase | null>(null);
+  const [deepExplorationMode, setDeepExplorationMode] = useState<boolean>(false);
   const [showNotebookModal, setShowNotebookModal] = useState<boolean>(false);
   const [showCodeSandbox, setShowCodeSandbox] = useState<boolean>(false);
   const [showLiveVoiceModal, setShowLiveVoiceModal] = useState<boolean>(false);
@@ -330,48 +401,87 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
   // Start a fresh new chat session
   const handleNewChat = () => {
-    const newSession = createSession("محادثة جديدة");
-    setSessions((prev) => [newSession, ...prev]);
-    setActiveSessionId(newSession.id);
-    setMessages(newSession.messages);
-    setInput("");
-    setAttachments([]);
+    console.log("[ChatView] handleNewChat triggered.");
+    try {
+      if (activeSessionId && Array.isArray(messages)) {
+        const title = generateSessionTitle(messages);
+        updateSession(activeSessionId, (s) => ({ ...s, messages, title }));
+      }
+      const newSession = createSession("محادثة جديدة");
+      const all = loadSessions();
+      setSessions(all);
+      setActiveSessionId(newSession.id);
+      setMessages(newSession.messages);
+      setInput("");
+      setAttachments([]);
+      console.log(`[ChatView] New chat created with id: ${newSession.id}`);
+    } catch (err) {
+      console.error("[ChatView] Error inside handleNewChat:", err);
+    }
   };
 
   // Switch to a previous session
   const handleSelectSession = (id: string) => {
-    setActiveSessionId(id);
-    const target = sessions.find((s) => s.id === id);
-    if (target) {
-      setMessages(target.messages);
+    console.log(`[ChatView] handleSelectSession triggered for session id: ${id}`);
+    if (id === activeSessionId) return;
+    try {
+      if (activeSessionId && Array.isArray(messages)) {
+        const title = generateSessionTitle(messages);
+        updateSession(activeSessionId, (s) => ({ ...s, messages, title }));
+      }
+      setActiveSessionId(id);
+      const all = loadSessions();
+      setSessions(all);
+      const target = all.find((s) => s.id === id);
+      if (target && Array.isArray(target.messages)) {
+        setMessages(target.messages);
+      }
+      console.log(`[ChatView] Successfully switched to session ${id}`);
+    } catch (err) {
+      console.error("[ChatView] Error inside handleSelectSession:", err);
     }
   };
 
   // Delete session
   const handleDeleteSession = (id: string) => {
-    const { sessions: updated, nextActiveId } = deleteSession(id);
-    setSessions(updated);
-    if (activeSessionId === id) {
-      setActiveSessionId(nextActiveId);
-      const target = updated.find((s) => s.id === nextActiveId) || updated[0];
-      setMessages(target ? target.messages : []);
+    console.log(`[ChatView] handleDeleteSession triggered for session id: ${id}`);
+    try {
+      const { sessions: updated, nextActiveId } = deleteSession(id);
+      setSessions(updated);
+      if (activeSessionId === id) {
+        setActiveSessionId(nextActiveId);
+        const target = updated.find((s) => s.id === nextActiveId) || updated[0];
+        setMessages(target ? target.messages : []);
+      }
+    } catch (err) {
+      console.error("[ChatView] Error inside handleDeleteSession:", err);
     }
   };
 
   // Rename session
   const handleRenameSession = (id: string, newTitle: string) => {
-    renameSession(id, newTitle);
-    setSessions((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, title: newTitle.trim() || s.title } : s))
-    );
+    console.log(`[ChatView] handleRenameSession triggered for ${id}: "${newTitle}"`);
+    try {
+      renameSession(id, newTitle);
+      setSessions((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, title: newTitle.trim() || s.title } : s))
+      );
+    } catch (err) {
+      console.error("[ChatView] Error inside handleRenameSession:", err);
+    }
   };
 
   // Clear all sessions
   const handleClearAllSessions = () => {
-    const fresh = clearAllSessions();
-    setSessions(fresh);
-    setActiveSessionId(fresh[0].id);
-    setMessages(fresh[0].messages);
+    console.log("[ChatView] handleClearAllSessions triggered.");
+    try {
+      const fresh = clearAllSessions();
+      setSessions(fresh);
+      setActiveSessionId(fresh[0].id);
+      setMessages(fresh[0].messages);
+    } catch (err) {
+      console.error("[ChatView] Error inside handleClearAllSessions:", err);
+    }
   };
 
   // Media Generation Handler
@@ -866,6 +976,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
         skipVerification: config.skipVerification,
         attachments: currentAttachments,
         searchGrounding: true,
+        forceExploratoryMode: deepExplorationMode,
         onStepProgress: (_step, details) => {
           if (details) setCurrentStep(details);
         },
@@ -932,42 +1043,42 @@ export const ChatView: React.FC<ChatViewProps> = ({
   return (
     <div className="flex flex-col h-[calc(100vh-4.5rem)] max-w-6xl mx-auto w-full px-2 sm:px-4 py-2">
       {/* Top Session & Action Bar */}
-      <div className="flex items-center justify-between gap-2 py-1.5 px-2 bg-slate-900/60 border border-slate-800 rounded-xl mb-2 text-xs">
-        <div className="flex items-center gap-2 overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-2 py-1.5 px-2 bg-slate-900/80 border border-slate-800 rounded-xl mb-2 text-xs">
+        <div className="flex items-center gap-2 shrink-0">
           {/* New Chat Button */}
           <button
             type="button"
             onClick={handleNewChat}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium shadow transition-all cursor-pointer shrink-0"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium shadow-sm transition-all cursor-pointer shrink-0"
             title="بدء صفحة محادثة جديدة"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>محادثة جديدة</span>
+            <span className="font-semibold">محادثة جديدة</span>
           </button>
 
           {/* Chat History Drawer Toggle */}
           <button
             type="button"
             onClick={() => setIsHistoryDrawerOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all cursor-pointer shrink-0 border border-slate-700"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all cursor-pointer shrink-0 border border-slate-700"
             title="استعراض سجل المحادثات السابقة"
           >
             <History className="w-3.5 h-3.5 text-cyan-400" />
-            <span>سجل المحادثات</span>
+            <span>السجل</span>
             <span className="px-1.5 py-0.2 rounded-full bg-slate-700 text-[10px] text-slate-300 font-mono">
               {sessions.length}
             </span>
           </button>
 
           {/* Current Session Title */}
-          <div className="text-slate-400 text-xs truncate hidden md:block border-r border-slate-800 pr-2 mr-1">
+          <div className="text-slate-400 text-xs truncate hidden lg:block border-r border-slate-800 pr-2 mr-1 max-w-[200px]">
             <span className="text-slate-500">الجلسة:</span>{" "}
             <span className="text-slate-200 font-medium">{activeSession?.title || "محادثة أوميغا"}</span>
           </div>
         </div>
 
         {/* Voice & Media Studio Triggers */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 max-w-full">
           {/* Omega Voice Hub Trigger */}
           <button
             type="button"
@@ -1023,6 +1134,24 @@ export const ChatView: React.FC<ChatViewProps> = ({
           >
             <GitBranch className="w-3.5 h-3.5 text-purple-400" />
             <span className="hidden sm:inline">شجرة الاستدلال</span>
+          </button>
+
+          {/* Deep Exploration Mode (Open Problem & Hypothesis Engine) Trigger */}
+          <button
+            type="button"
+            onClick={() => setDeepExplorationMode((prev) => !prev)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 border ${
+              deepExplorationMode
+                ? "bg-indigo-950/90 border-indigo-400 text-indigo-200 ring-1 ring-indigo-400/50 shadow-indigo-900/40"
+                : "bg-slate-800 hover:bg-slate-700 text-indigo-300 border-slate-700"
+            }`}
+            title="تفعيل وضع الاستدلال الاستكشافي ونواة توليد الفرضيات والتفنيد الذاتي للمسائل المفتوحة"
+          >
+            <Compass className={`w-3.5 h-3.5 text-indigo-400 ${deepExplorationMode ? "animate-spin-slow" : ""}`} />
+            <span className="hidden sm:inline">الاستكشاف العميق:</span>
+            <span className={`font-mono text-[11px] ${deepExplorationMode ? "text-amber-300 font-bold" : "text-slate-400"}`}>
+              {deepExplorationMode ? "مفعّل" : "تلقائي"}
+            </span>
           </button>
 
           {/* Omega Notebooks Trigger */}
@@ -1530,9 +1659,28 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
                 {/* Fusion Result Telemetry and Candidate Accordion */}
                 {msg.fusionResult && !msg.isFusing && (
-                  <div className="space-y-2 mt-2">
+                  <div className="space-y-2.5 mt-2">
+                    {/* Deep Exploration Hypothesis Engine Card */}
+                    {msg.fusionResult.exploratoryData && (
+                      <SafeBoundary>
+                        <ExploratoryReasoningCard
+                          data={msg.fusionResult.exploratoryData}
+                          onOpenTreeOfThought={() => {
+                            const userQ =
+                              messages.find((m, i) => i === messages.indexOf(msg) - 1)?.content ||
+                              "استكشاف المسألة المفتوحة";
+                            const thoughtCase = createThoughtTreeFromFusion(userQ, msg.fusionResult!);
+                            setActiveThoughtCase(thoughtCase);
+                            setShowTreeOfThought(true);
+                          }}
+                        />
+                      </SafeBoundary>
+                    )}
+
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <SignalMeter result={msg.fusionResult} />
+                      <SafeBoundary>
+                        <SignalMeter result={msg.fusionResult} />
+                      </SafeBoundary>
                       <button
                         type="button"
                         onClick={() => {
@@ -1589,7 +1737,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                             >
                               <div className="flex items-center justify-between font-mono text-[11px] text-slate-300">
                                 <span className="font-bold text-cyan-400">
-                                  {cand.modelName} ({cand.provider})
+                                  {cand.modelId}
                                 </span>
                                 <div className="flex items-center gap-2">
                                   <span className="text-purple-300">
@@ -1817,6 +1965,21 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
       {/* Input Box with Attachment Support */}
       <div className="relative mt-1">
+        {/* Dynamic Exploratory Notification Banner */}
+        {(deepExplorationMode || (input.trim() && isOpenProblemQuery(input))) && (
+          <div className="flex items-center justify-between px-3 py-1.5 bg-gradient-to-r from-indigo-950/70 via-slate-900 to-amber-950/40 border border-indigo-500/40 rounded-xl mb-2 text-[11px] text-indigo-200 shadow-md">
+            <div className="flex items-center gap-2">
+              <Compass className="w-3.5 h-3.5 text-amber-400 animate-spin-slow shrink-0" />
+              <span>
+                <strong>وضع الاستدلال الاستكشافي نشط:</strong> سيتم تحليل المسألة متعددة المسارات، تشغيل المحاكاة الرمزية، وتوليد الفرضيات المقاومة للتفنيد الذاتي وحساب Ψ_explore.
+              </span>
+            </div>
+            <span className="hidden sm:inline px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-[10px] shrink-0">
+              Open Problem Engine
+            </span>
+          </div>
+        )}
+
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -1952,10 +2115,12 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
       {/* Persistent Floating Omega Voice Synthesizer Player */}
       <OmegaVoicePlayer
-        selectedPersonaId={selectedPersonaId}
+        currentPersonaId={selectedPersonaId}
         onSelectPersona={(id) => setSelectedPersonaId(id)}
         speedMultiplier={speedMultiplier}
         onChangeSpeed={(speed) => setSpeedMultiplier(speed)}
+        autoSpeak={autoSpeakResponses}
+        onToggleAutoSpeak={() => setAutoSpeakResponses((prev) => !prev)}
       />
 
       {/* Advanced Capabilities Modal */}

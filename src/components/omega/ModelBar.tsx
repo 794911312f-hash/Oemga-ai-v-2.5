@@ -11,6 +11,7 @@ interface ModelBarProps {
 export const ModelBar: React.FC<ModelBarProps> = ({
   activeModels = [
     "qwen-2-5-compat",
+    "grok-compat",
     "llama-3-3-compat",
     "gemini-3.8-flash",
     "deepseek-r1-compat",

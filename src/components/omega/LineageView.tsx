@@ -69,7 +69,8 @@ export const LineageView: React.FC = () => {
                 direct: "border-emerald-500/40 bg-emerald-950/20 text-emerald-300",
                 aggregated: "border-purple-500/40 bg-purple-950/20 text-purple-300",
                 uncertain: "border-amber-500/40 bg-amber-950/20 text-amber-300",
-              }[node.mode];
+                exploratory: "border-cyan-500/40 bg-cyan-950/20 text-cyan-300",
+              }[node.mode] || "border-slate-700 bg-slate-900 text-slate-300";
 
               return (
                 <div

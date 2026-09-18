@@ -11,6 +11,7 @@ export type ModelId =
   | "gpt-4o-compat"
   | "llama-3-3-compat"
   | "qwen-2-5-compat"
+  | "grok-compat"
   | "omega-kernel-c1"
   | "omega-kernel-c2";
 
@@ -20,6 +21,7 @@ export interface ProviderKeys {
   anthropicApiKey?: string;
   openrouterApiKey?: string;
   groqApiKey?: string;
+  xaiApiKey?: string;
   dashscopeApiKey?: string;
   deepseekApiKey?: string;
   ollamaBaseUrl?: string;
@@ -28,7 +30,7 @@ export interface ProviderKeys {
 export interface ModelSpec {
   id: ModelId;
   name: string;
-  family: "Google Gemini" | "DeepSeek" | "Anthropic" | "OpenAI" | "Meta" | "Alibaba" | "Omega Core";
+  family: "Google Gemini" | "DeepSeek" | "Anthropic" | "OpenAI" | "Meta" | "Alibaba" | "xAI" | "Omega Core";
   tier: "flagship" | "reasoning" | "speed" | "kernel";
   description: string;
   serverType: "direct" | "bridged" | "kernel";
@@ -120,6 +122,18 @@ export const OMEGA_MODELS: Record<ModelId, ModelSpec> = {
     serverType: "direct",
     avatarColor: "bg-violet-500",
     accentHex: "#8b5cf6",
+    contextWindow: "128k tokens",
+    defaultTemp: 0.3,
+  },
+  "grok-compat": {
+    id: "grok-compat",
+    name: "Grok 3 (xAI Real-Time News & Social Server)",
+    family: "xAI",
+    tier: "flagship",
+    description: "خادم إكس إيه آي المتفوق في رصد الأخبار العاجلة الحية وتحليل شبكات التواصل الاجتماعي ومنصة X والتريندات العالمية",
+    serverType: "direct",
+    avatarColor: "bg-slate-900 text-cyan-400 border border-cyan-500/40",
+    accentHex: "#0ea5e9",
     contextWindow: "128k tokens",
     defaultTemp: 0.3,
   },

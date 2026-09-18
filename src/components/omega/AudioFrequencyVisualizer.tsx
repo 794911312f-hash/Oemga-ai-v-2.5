@@ -56,6 +56,8 @@ export const AudioFrequencyVisualizer: React.FC<AudioFrequencyVisualizerProps> =
 
     let isMounted = true;
 
+    let lastMetricsUpdateTime = 0;
+
     const renderFrame = () => {
       if (!isMounted) return;
 
@@ -73,10 +75,15 @@ export const AudioFrequencyVisualizer: React.FC<AudioFrequencyVisualizerProps> =
 
       // Read audio data from the frequency engine
       const freqData = engine.getFrequencyData();
-      const currentMetrics = engine.getMetrics();
-
-      setMetrics(currentMetrics);
-      onMetricsUpdate?.(currentMetrics);
+      const now = performance.now();
+      if (now - lastMetricsUpdateTime > 200) {
+        lastMetricsUpdateTime = now;
+        const currentMetrics = engine.getMetrics();
+        if (showMetrics) {
+          setMetrics(currentMetrics);
+        }
+        onMetricsUpdate?.(currentMetrics);
+      }
 
       if (mode === "bars" || mode === "compact") {
         drawBars(ctx, width, h, freqData, barCount, accentTheme, mode === "compact");
@@ -84,6 +91,7 @@ export const AudioFrequencyVisualizer: React.FC<AudioFrequencyVisualizerProps> =
         const timeData = engine.getTimeDomainData();
         drawWaveform(ctx, width, h, timeData, accentTheme);
       } else if (mode === "circular") {
+        const currentMetrics = engine.getMetrics();
         drawCircular(ctx, width, h, freqData, accentTheme, currentMetrics.averageVolume);
       }
 

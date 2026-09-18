@@ -155,14 +155,17 @@ const NOTEBOOK_TOPICS: NotebookTopic[] = [
 ];
 
 interface Props {
+  isOpen?: boolean;
   onClose?: () => void;
 }
 
-export const OmegaNotebookModal: React.FC<Props> = ({ onClose }) => {
+export const OmegaNotebookModal: React.FC<Props> = ({ isOpen = true, onClose }) => {
   const [selectedTopicId, setSelectedTopicId] = useState<string>(NOTEBOOK_TOPICS[0].id);
   const [viewMode, setViewMode] = useState<"slides" | "notebook">("slides");
   const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(0);
   const [copied, setCopied] = useState<boolean>(false);
+
+  if (isOpen === false) return null;
 
   const currentTopic = NOTEBOOK_TOPICS.find((t) => t.id === selectedTopicId) || NOTEBOOK_TOPICS[0];
   const currentSlide = currentTopic.slides[currentSlideIndex] || currentTopic.slides[0];

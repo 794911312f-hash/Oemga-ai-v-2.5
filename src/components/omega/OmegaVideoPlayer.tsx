@@ -33,11 +33,11 @@ import {
 } from "../../lib/omega/speech";
 
 export interface VideoGenerationData {
-  prompt: string;
+  prompt?: string;
   videoUrl?: string;
   duration?: number;
   style?: string;
-  theme?: "space" | "quantum" | "nature" | "philosophy" | "geometry" | "fantasy" | "science";
+  theme?: "space" | "quantum" | "nature" | "philosophy" | "geometry" | "fantasy" | "science" | "free_fall";
   modelId?: VideoModelId | string;
   modelName?: string;
   modelProvider?: string;
@@ -77,7 +77,7 @@ export const OmegaVideoPlayer: React.FC<OmegaVideoPlayerProps> = ({
   const animFrameIdRef = useRef<number | null>(null);
   const timeRef = useRef<number>(0);
 
-  const rawData = video || videoData || {};
+  const rawData: VideoGenerationData = video || videoData || {};
   const currentPrompt = rawData.prompt || propPrompt || "مشهد حركي تفاعلي";
 
   // Initial video model

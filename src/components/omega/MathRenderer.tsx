@@ -150,8 +150,8 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
             }
 
             // 3. Split Inline Math ($...$ or \(...\))
-            // Match single dollar $ not followed/preceded by digit or dollar (avoid currency like $50)
-            const inlineMathRegex = /(\$(?!\s)[\s\S]*?(?<!\s)\$|\\\([\s\S]*?\\\))/g;
+            // Match single dollar $ ... $ or \( ... \) safely without lookbehinds
+            const inlineMathRegex = /(\$[^\$\n]+?\$|\\\([\s\S]+?\\\))/g;
             const inlineParts = subPart.split(inlineMathRegex);
 
             return (
@@ -249,5 +249,10 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
     });
   };
 
-  return <div className={`math-content ${className}`}>{parseContent(content)}</div>;
+  try {
+    return <div className={`math-content ${className}`}>{parseContent(content)}</div>;
+  } catch (err) {
+    console.error("[MathRenderer Caught Error]:", err);
+    return <div className={`math-content whitespace-pre-wrap ${className}`}>{content}</div>;
+  }
 };

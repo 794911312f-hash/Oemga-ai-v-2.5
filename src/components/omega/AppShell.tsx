@@ -10,6 +10,8 @@ import {
   Terminal,
   UserCheck,
   LogIn,
+  ExternalLink,
+  Calculator,
 } from "lucide-react";
 import { OmegaMark } from "./OmegaMark";
 import { ModelBar } from "./ModelBar";
@@ -18,11 +20,12 @@ import { KernelLab } from "./KernelLab";
 import { MemoryView } from "./MemoryView";
 import { LineageView } from "./LineageView";
 import { OptimizerLab } from "./OptimizerLab";
+import { SymbolicCASWorkbench } from "./SymbolicCASWorkbench";
 import { AuthModal, type OmegaUser } from "./AuthModal";
 import { DEFAULT_OMEGA_CONFIG, type OmegaConfig } from "../../lib/omega/optimizer";
 import type { FusionResult } from "../../lib/omega/fusion";
 
-export type NavTab = "chat" | "kernel" | "memory" | "lineage" | "optimizer";
+export type NavTab = "chat" | "kernel" | "memory" | "lineage" | "optimizer" | "cas";
 
 export const AppShell: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>("chat");
@@ -94,6 +97,12 @@ export const AppShell: React.FC = () => {
       subLabel: "Optimizer",
       icon: Sliders,
     },
+    {
+      id: "cas" as NavTab,
+      label: "الحساب الرمزي والنظم (SymPy)",
+      subLabel: "Symbolic CAS",
+      icon: Calculator,
+    },
   ];
 
   return (
@@ -128,6 +137,26 @@ export const AppShell: React.FC = () => {
                 <span className="text-slate-500">|</span>
                 <span className="text-cyan-400">Ψ Engine Ready</span>
               </div>
+
+              {/* Open in New Window / New Tab Button */}
+              <a
+                href={typeof window !== "undefined" ? window.location.href : "#"}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  try {
+                    window.open(window.location.href, "_blank", "noopener,noreferrer");
+                  } catch {
+                    // Fallback to normal anchor navigation
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-cyan-500/40 bg-slate-900/90 hover:bg-cyan-950/40 text-cyan-200 hover:border-cyan-400 text-xs font-semibold transition-all cursor-pointer shadow-sm hover:shadow-cyan-950/50 shrink-0"
+                title="فتح نظام أوميغا في صفحة / نافذة جديدة مستقلة"
+              >
+                <ExternalLink className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span className="inline">صفحة جديدة</span>
+              </a>
 
               <button
                 type="button"
@@ -202,6 +231,11 @@ export const AppShell: React.FC = () => {
         {activeTab === "lineage" && <LineageView />}
         {activeTab === "optimizer" && (
           <OptimizerLab config={config} onChangeConfig={setConfig} />
+        )}
+        {activeTab === "cas" && (
+          <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 space-y-6">
+            <SymbolicCASWorkbench />
+          </div>
         )}
       </main>
 

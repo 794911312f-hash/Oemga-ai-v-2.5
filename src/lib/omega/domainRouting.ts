@@ -12,6 +12,7 @@ export type Domain =
   | "science_factual"
   | "creative_writing"
   | "philosophy_theology"
+  | "news_social"
   | "general";
 
 export interface DomainRouteResult {
@@ -56,6 +57,14 @@ const DOMAIN_KEYWORDS: Record<Domain, string[]> = {
     "ابن سينا", "كانط", "نيتشه", "سبينوزا", "توما الأكويني", "الروح", "الوعي", "التوحيد", "التثليث",
     "التناسخ", "الكارما", "المعنى", "العدالة الإلهية", "فلسفي", "فلسفية", "إشكالية", "إشكاليات"
   ],
+  news_social: [
+    "news", "breaking", "social", "twitter", "tweet", "tweets", "x.com", "trending",
+    "media", "politics", "current events", "now", "today", "facebook", "instagram", "tiktok",
+    "reuters", "aljazeera", "bbc", "trends", "happening", "grok", "xai", "elon",
+    "أخبار", "اخبار", "عاجل", "تواصل اجتماعي", "سوشيال ميديا", "تويتر", "منصة x", "تغريدة",
+    "تغريدات", "تريند", "ترند", "الحدث", "اليوم", "الآن", "مستجدات", "أحداث جارية",
+    "صحافة", "إعلام", "فيسبوك", "انستغرام", "تيك توك", "الجزيرة", "العربية", "غروك", "جروك"
+  ],
   general: [
     "who", "what", "where", "when", "how", "hello", "help", "summary", "explain", "analyze", "review",
     "من", "ماذا", "أين", "متى", "كيف", "مرحبا", "اشرح", "لخص", "حلل", "تحليل", "راجع", "مساعدة"
@@ -95,7 +104,14 @@ const DOMAIN_MODEL_PRIORITY: Record<Domain, ModelId[]> = {
     "gemini-3.8-flash",
     "qwen-2-5-compat",
   ],
+  news_social: [
+    "grok-compat",
+    "gemini-3.8-flash",
+    "gpt-4o-compat",
+    "llama-3-3-compat",
+  ],
   general: [
+    "grok-compat",
     "gpt-4o-compat",
     "gemini-3.8-flash",
     "deepseek-r1-compat",
@@ -113,6 +129,7 @@ export function detectDomain(question: string): { domain: Domain; confidence: nu
     science_factual: 0,
     creative_writing: 0,
     philosophy_theology: 0,
+    news_social: 0,
     general: 0,
   };
   const matchedWords: Record<Domain, string[]> = {
@@ -121,6 +138,7 @@ export function detectDomain(question: string): { domain: Domain; confidence: nu
     science_factual: [],
     creative_writing: [],
     philosophy_theology: [],
+    news_social: [],
     general: [],
   };
 

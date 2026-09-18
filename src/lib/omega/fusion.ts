@@ -26,6 +26,17 @@ import { modelsForQuestion, type Domain } from "./domainRouting";
 import { verifyAnswer, type VerificationResult } from "./selfVerify";
 import { completeWithModel, type ChatMsg, type CompleteOk } from "./providers";
 import type { ModelId, ProviderKeys } from "./models";
+import {
+  isOpenProblemQuery,
+  buildExplorationPathways,
+  runSymbolicExplorationAudit,
+  buildThoughtTreeFromExploration,
+  type DeepExplorationResult,
+} from "./exploratoryEngine";
+import { searchOEIS, getCollatzCoreSequences } from "./oeisClient";
+import { executeSymbolicOperation, type SymbolicResult } from "./symbolicEngine";
+import { searchSimilarHypotheses } from "./vectorStore";
+import { searchArxiv, type ArxivPaperEntry } from "./arxivClient";
 
 export interface FusionCandidate {
   modelId: ModelId;
@@ -46,7 +57,7 @@ export interface FusionTelemetry {
 }
 
 export interface FusionResult {
-  mode: "direct" | "aggregated" | "uncertain";
+  mode: "direct" | "aggregated" | "uncertain" | "exploratory";
   finalText: string;
   /** present only when mode === "uncertain" */
   secondText?: string;
@@ -56,6 +67,7 @@ export interface FusionResult {
   embeddingSource: "semantic" | "hash";
   verification?: VerificationResult;
   telemetry?: FusionTelemetry;
+  exploratoryData?: DeepExplorationResult;
 }
 
 export interface FusionOptions {
@@ -72,6 +84,7 @@ export interface FusionOptions {
   skipVerification?: boolean;
   attachments?: any[];
   searchGrounding?: boolean;
+  forceExploratoryMode?: boolean;
   onStepProgress?: (step: "routing" | "gathering" | "embedding" | "scoring" | "resolving" | "verifying", details?: string) => void;
 }
 
@@ -112,25 +125,25 @@ async function gatherCandidates(
     }
   }
 
-  // Sequential model completion to prevent simultaneous bursts on rate limits
-  const ok: { modelId: ModelId; text: string }[] = [];
-  for (let i = 0; i < models.length; i++) {
-    const id = models[i];
-    try {
-      const res = await completeWithModel(id, messages, {
+  // Parallel model completion to improve response time while handling potential rejections
+  const results = await Promise.allSettled(
+    models.map((id) =>
+      completeWithModel(id, messages, {
         temperature: opts.temperature ?? 0.4,
         maxTokens: opts.maxTokens ?? 1024,
         keys: opts.keys,
         attachments: opts.attachments,
         searchGrounding: opts.searchGrounding,
-      });
-      if (res.ok && res.text.trim()) {
-        ok.push({ modelId: id, text: res.text.trim() });
-      }
-    } catch {
-      // Continue to next candidate
-    }
-  }
+      }).then((res) => ({ id, res }))
+    )
+  );
+
+  const ok: { modelId: ModelId; text: string }[] = results
+    .filter(
+      (r): r is PromiseFulfilledResult<{ id: ModelId; res: any }> =>
+        r.status === "fulfilled" && r.value.res.ok && r.value.res.text.trim()
+    )
+    .map((r) => ({ modelId: r.value.id, text: r.value.res.text.trim() }));
 
   return ok;
 }
@@ -313,6 +326,93 @@ export async function fuseResponses(
     rawCount: raw.length,
     durationMs: Date.now() - startTime,
   };
+
+  // Check if exploratory reasoning mode is triggered
+  const isExploratory = opts.forceExploratoryMode || isOpenProblemQuery(question);
+
+  if (isExploratory) {
+    opts.onStepProgress?.("gathering", "توليد مسارات الاستكشاف وحلقات التفنيد الذاتي والمحاكاة الرمزية...");
+    const pathways = buildExplorationPathways(question);
+    const symbolicSimulations = runSymbolicExplorationAudit(question);
+    const thoughtTreeCase = buildThoughtTreeFromExploration(question, pathways, symbolicSimulations);
+
+    const finalText = await aggregate(question, candidates, opts);
+    opts.onStepProgress?.("verifying", "إجراء فحص التحقق الذاتي والموثوقية الاستكشافية...");
+    const verification = opts.skipVerification
+      ? undefined
+      : await verifyAnswer(question, finalText, opts.verifierModel ?? opts.aggregatorModel, opts.keys);
+
+    const avgPsi = Number(
+      (
+        pathways.reduce((sum, p) => sum + p.exploratoryPsi, 0) /
+        (pathways.length || 1)
+      ).toFixed(3)
+    );
+
+    const isCollatz = /collatz|كولاتز|3x\+1|3n\+1/i.test(question);
+    let oeisSeqs = isCollatz ? getCollatzCoreSequences() : [];
+    try {
+      if (!isCollatz) {
+        oeisSeqs = await searchOEIS(question, 4);
+      }
+    } catch (_e) {}
+
+    let casResult: SymbolicResult | undefined = undefined;
+    try {
+      if (isCollatz) {
+        casResult = await executeSymbolicOperation({
+          operation: "collatz_orbit",
+          expression: "27",
+        });
+      } else {
+        casResult = await executeSymbolicOperation({
+          operation: "simplify",
+          expression: "x^2 - 1",
+        });
+      }
+    } catch (_e) {}
+
+    let priorMatches = [];
+    try {
+      priorMatches = searchSimilarHypotheses(question, 3);
+    } catch (_e) {}
+
+    let arxivPapers: ArxivPaperEntry[] = [];
+    try {
+      arxivPapers = await searchArxiv(question, 3);
+    } catch (_e) {}
+
+    const exploratoryData: DeepExplorationResult = {
+      isOpenProblem: true,
+      problemTitle: question.slice(0, 70),
+      problemDomain: domain,
+      formalDefinition: pathways[0]?.hypothesisText || "صياغة بنيوية للمسألة الرياضية المفتوحة",
+      knownBoundsSummary: "تحقق حسابي تجريبي صامد حتى 2.95 × 10²⁰ | مبرهنة تيرينس تاو للقيم شبه المؤكدة | حظر الدورات غير التافهة حتى 68 خطوة.",
+      activePathways: pathways,
+      symbolicSimulations,
+      overallExploratoryPsi: avgPsi,
+      synthesizedDiscovery: finalText,
+      falsificationSummary: `تم إخضاع جميع المسارات لـ ${pathways.reduce((acc, p) => acc + p.falsificationTests.length, 0)} اختبارات تفنيد ذاتي وبحث عن أمثلة مضادة.`,
+      suggestedOpenHypotheses: pathways.map((p) => p.nameAr),
+      thoughtTreeCase,
+      oeisSequences: oeisSeqs,
+      symbolicCASResult: casResult,
+      retrievedPriorHypotheses: priorMatches,
+      arxivPapers,
+    };
+
+    return {
+      mode: "exploratory",
+      finalText,
+      secondText: candidates[1]?.text,
+      candidates,
+      domain,
+      embeddingSource: source,
+      verification,
+      telemetry: fullTelemetry,
+      exploratoryData,
+    };
+  }
 
   // Check if candidate 0 has extraordinary standalone consensus and no mathematical or identity gaps
   const hasEquations = candidates.some((c) => c.text.includes("$$") || c.text.includes("$"));

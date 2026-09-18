@@ -12,7 +12,7 @@ export interface LineageNode {
   generation: number;
   parentId?: string;
   query: string;
-  mode: "direct" | "aggregated" | "uncertain";
+  mode: "direct" | "aggregated" | "uncertain" | "exploratory";
   domain: Domain;
   winnerModel?: string;
   candidateCount: number;

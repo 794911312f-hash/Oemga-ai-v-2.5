@@ -42,6 +42,10 @@ export interface ProblemCase {
  * Transforms real AI multi-model fusion reasoning into an interactive Tree-of-Thought
  */
 export function createThoughtTreeFromFusion(question: string, result: any): ProblemCase {
+  if (result?.exploratoryData?.thoughtTreeCase) {
+    return result.exploratoryData.thoughtTreeCase;
+  }
+
   const domain = result.domain || "science_factual";
   const candidates: any[] = result.candidates || [];
   const chosenModelId = result.chosenModelId;

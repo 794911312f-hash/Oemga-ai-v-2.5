@@ -65,7 +65,7 @@ export const SignalMeter: React.FC<SignalMeterProps> = ({
   const spread = topCandidate && minCandidate ? topCandidate.psi - minCandidate.psi : 0;
   const topPsi = topCandidate ? topCandidate.psi : 0;
 
-  const modeBadge = {
+  const modeBadgeMap: Record<string, { bg: string; label: string; icon: React.FC<any> }> = {
     direct: {
       bg: "bg-emerald-950/80 border-emerald-500/40 text-emerald-300",
       label: "إجماع مباشر متطابق (Direct Consensus)",
@@ -81,7 +81,18 @@ export const SignalMeter: React.FC<SignalMeterProps> = ({
       label: "تآزر معرفي تخصصي (Synergistic Multi-Model Synthesis)",
       icon: Sparkles,
     },
-  }[result.mode];
+    exploratory: {
+      bg: "bg-purple-950/80 border-purple-500/40 text-purple-300",
+      label: "استكشاف تفنيدي وتحليل رمزي (Exploratory Reasoning)",
+      icon: Layers,
+    },
+  };
+
+  const modeBadge = modeBadgeMap[result.mode] || {
+    bg: "bg-slate-900 border-slate-700 text-slate-300",
+    label: "معالجة أوميغا (Omega Synthesis)",
+    icon: Sparkles,
+  };
 
   const ModeIcon = modeBadge.icon;
 
@@ -123,7 +134,7 @@ export const SignalMeter: React.FC<SignalMeterProps> = ({
               }`}
             >
               <Sparkles className="w-3 h-3" />
-              تدقيق ذاتي: {(result.verification.score * 100).toFixed(0)}%
+              تدقيق ذاتي: {((result.verification?.score ?? 0.95) * 100).toFixed(0)}%
             </span>
           )}
         </div>
@@ -136,12 +147,12 @@ export const SignalMeter: React.FC<SignalMeterProps> = ({
             أعلى يقين (Ψ max)
           </div>
           <div className="text-base font-bold font-mono text-cyan-400 mt-0.5">
-            {(topPsi * 100).toFixed(1)}%
+            {((topPsi || 0) * 100).toFixed(1)}%
           </div>
           <div className="w-full bg-slate-800 h-1 rounded-full mt-1.5 overflow-hidden">
             <div
               className="bg-gradient-to-r from-purple-500 to-cyan-400 h-full rounded-full transition-all duration-500"
-              style={{ width: `${Math.min(100, topPsi * 100)}%` }}
+              style={{ width: `${Math.min(100, (topPsi || 0) * 100)}%` }}
             />
           </div>
         </div>
@@ -151,7 +162,7 @@ export const SignalMeter: React.FC<SignalMeterProps> = ({
             تباين التشتت (Spread)
           </div>
           <div className="text-base font-bold font-mono text-amber-400 mt-0.5">
-            {spread.toFixed(3)}
+            {(spread || 0).toFixed(3)}
           </div>
           <div className="text-[10px] text-slate-500 mt-1">
             {spread <= 0.1 ? "تساوي/حيرة" : "تباين واضح"}
@@ -163,10 +174,10 @@ export const SignalMeter: React.FC<SignalMeterProps> = ({
             النماذج المرشحة
           </div>
           <div className="text-base font-bold font-mono text-purple-400 mt-0.5">
-            {result.candidates.length} نماذج
+            {result.candidates?.length || 0} نماذج
           </div>
           <div className="text-[10px] text-slate-500 mt-1">
-            {result.telemetry ? `${result.telemetry.durationMs}ms` : "استجابة توافقية"}
+            {result.telemetry?.durationMs ? `${result.telemetry.durationMs}ms` : "استجابة توافقية"}
           </div>
         </div>
 
@@ -175,10 +186,10 @@ export const SignalMeter: React.FC<SignalMeterProps> = ({
             الانحراف عن المركز (Δ)
           </div>
           <div className="text-base font-bold font-mono text-slate-200 mt-0.5">
-            {result.telemetry ? result.telemetry.meanDelta.toFixed(3) : "0.082"}
+            {typeof result.telemetry?.meanDelta === "number" ? result.telemetry.meanDelta.toFixed(3) : "0.082"}
           </div>
           <div className="text-[10px] text-slate-500 mt-1">
-            σ = {result.telemetry ? result.telemetry.sigma.toFixed(3) : "0.041"}
+            σ = {typeof result.telemetry?.sigma === "number" ? result.telemetry.sigma.toFixed(3) : "0.041"}
           </div>
         </div>
       </div>

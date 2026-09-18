@@ -155,7 +155,7 @@ export const OmegaProfessor3D: React.FC<OmegaProfessor3DProps> = ({
 
   const toggleMic = () => {
     if (!recognitionRef.current) {
-      alert("التعرف على الصوت غير مدعوم في هذا المتصفح. يرجى استخدام متصفح Chrome أو Edge.");
+      console.warn("Speech recognition is not supported in this browser environment.");
       return;
     }
     if (isListening) {
@@ -307,15 +307,20 @@ export const OmegaProfessor3D: React.FC<OmegaProfessor3DProps> = ({
     camera.lookAt(0, 0.4, 0);
     cameraRef.current = camera;
 
-    // WebGL Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    rendererRef.current = renderer;
-
-    container.appendChild(renderer.domElement);
+    // WebGL Renderer safely initialized
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFShadowMap;
+      rendererRef.current = renderer;
+      container.appendChild(renderer.domElement);
+    } catch (err) {
+      console.warn("[OmegaProfessor3D] WebGL context initialization failed or disabled:", err);
+      return;
+    }
 
     // ==========================================
     // Lighting (Warm Lab Atmosphere + Cyan Highlights)
@@ -739,14 +744,19 @@ export const OmegaProfessor3D: React.FC<OmegaProfessor3DProps> = ({
     // ==========================================
     // Animation Loop
     // ==========================================
-    let clock = new THREE.Clock();
+    let isLoopActive = true;
+    let lastTime = performance.now();
+    let startTime = performance.now();
     let blinkTimer = 0;
     let isBlinking = false;
 
     const animate = () => {
+      if (!isLoopActive) return;
       animFrameIdRef.current = requestAnimationFrame(animate);
-      const delta = clock.getDelta();
-      const time = clock.getElapsedTime();
+      const currentTime = performance.now();
+      const delta = Math.min((currentTime - lastTime) / 1000, 0.1);
+      lastTime = currentTime;
+      const time = (currentTime - startTime) / 1000;
 
       // Smooth gaze interpolation
       targetLookRef.current.x += (mousePosRef.current.x - targetLookRef.current.x) * 0.06;
@@ -937,17 +947,23 @@ export const OmegaProfessor3D: React.FC<OmegaProfessor3DProps> = ({
         omegaBadgeRef.current.position.z = 0.46 + Math.sin(time * 3) * 0.002;
       }
 
-      renderer.render(scene, camera);
+      try {
+        if (rendererRef.current && sceneRef.current && cameraRef.current) {
+          renderer.render(scene, camera);
+        }
+      } catch (e) {
+        // Suppress WebGL lost context / transient render errors
+      }
     };
 
     animate();
 
     // Resize Handler
     const handleResize = () => {
-      if (!container) return;
-      const w = container.clientWidth;
-      const h = container.clientHeight;
-      camera.aspect = w / h;
+      if (!container || !rendererRef.current || !cameraRef.current) return;
+      const w = container.clientWidth || 300;
+      const h = container.clientHeight || 360;
+      camera.aspect = w / (h || 1);
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
     };
@@ -955,6 +971,7 @@ export const OmegaProfessor3D: React.FC<OmegaProfessor3DProps> = ({
     window.addEventListener("resize", handleResize);
 
     return () => {
+      isLoopActive = false;
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("resize", handleResize);
       if (animFrameIdRef.current) {
@@ -963,8 +980,8 @@ export const OmegaProfessor3D: React.FC<OmegaProfessor3DProps> = ({
       if (rendererRef.current) {
         rendererRef.current.dispose();
       }
-      if (container && renderer.domElement) {
-        container.innerHTML = "";
+      if (container && renderer.domElement && container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
       }
     };
   }, []);

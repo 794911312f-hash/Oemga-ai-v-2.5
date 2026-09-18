@@ -23,6 +23,7 @@ interface ChatHistoryDrawerProps {
   onNewChat: () => void;
   onDeleteSession: (id: string) => void;
   onRenameSession: (id: string, newTitle: string) => void;
+  onClearAll?: () => void;
 }
 
 export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
@@ -34,6 +35,7 @@ export const ChatHistoryDrawer: React.FC<ChatHistoryDrawerProps> = ({
   onNewChat,
   onDeleteSession,
   onRenameSession,
+  onClearAll,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
