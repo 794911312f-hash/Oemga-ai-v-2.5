@@ -1055,6 +1055,43 @@ async function callOpenAICompatibleApi(
   return text;
 }
 
+const OPENROUTER_MODEL_MAP: Record<string, string> = {
+  "deepseek-r1-compat": "deepseek/deepseek-r1",
+  "claude-3-5-sonnet-compat": "anthropic/claude-3.5-sonnet",
+  "gpt-4o-compat": "openai/gpt-4o",
+  "llama-3-3-compat": "meta-llama/llama-3.3-70b-instruct",
+  "qwen-2-5-compat": "qwen/qwen-2.5-72b-instruct",
+  "grok-compat": "x-ai/grok-beta",
+};
+
+async function handleOpenRouterRequest(
+  modelId: string,
+  messages: any[],
+  temperature: number,
+  maxTokens: number,
+  dynamicSystemContext: string,
+  openrouterKey: string
+): Promise<{ text: string; provider: string } | null> {
+  const orModelId = OPENROUTER_MODEL_MAP[modelId];
+  if (!orModelId) return null;
+
+  try {
+    const text = await callOpenAICompatibleApi(
+      "https://openrouter.ai/api/v1/chat/completions",
+      openrouterKey,
+      orModelId,
+      dynamicSystemContext,
+      messages,
+      temperature,
+      maxTokens
+    );
+    return { text, provider: `OpenRouter (${orModelId})` };
+  } catch (e: any) {
+    console.log(`[OpenRouter ${orModelId} direct]:`, e?.message || "unavailable");
+    return null;
+  }
+}
+
 async function callAnthropicApi(
   apiKey: string,
   model: string,
@@ -2787,6 +2824,7 @@ app.post("/api/omega/ensemble", async (req, res) => {
     messages = [],
     temperature = 0.4,
     maxTokens = 1024,
+    keys = {},
     attachments: rawAttachments = [],
     searchGrounding = false,
   } = req.body;
@@ -2932,8 +2970,36 @@ COLLABORATIVE COMPLEMENTARITY MANDATE:
       }
     }
   } catch (err: any) {
-    // Upstream rate limit (429) or failure handled gracefully without polluting logs
-    console.log("[Omega Ensemble]: Handled upstream rate limit smoothly via local neural ensemble engine.");
+    console.log("[Omega Ensemble]: Upstream Gemini error/rate limit, checking OpenRouter...");
+    const openrouterKey = keys.openrouterApiKey || process.env.OPENROUTER_API_KEY;
+    if (openrouterKey) {
+      try {
+        const results = await Promise.allSettled(
+          models.map(async (m: string) => {
+            const orModel = OPENROUTER_MODEL_MAP[m] || "meta-llama/llama-3.3-70b-instruct";
+            const text = await callOpenAICompatibleApi(
+              "https://openrouter.ai/api/v1/chat/completions",
+              openrouterKey,
+              orModel,
+              dynamicSystemContext,
+              messages,
+              temperature,
+              maxTokens
+            );
+            return { modelId: m, text };
+          })
+        );
+        const candidates = results
+          .filter((r): r is PromiseFulfilledResult<{ modelId: string; text: string }> => r.status === "fulfilled" && !!r.value.text)
+          .map((r) => r.value);
+        if (candidates.length > 0) {
+          ensembleCache.set(cacheKey, { timestamp: Date.now(), candidates });
+          return res.json({ ok: true, candidates, provider: "OpenRouter Ensemble" });
+        }
+      } catch (orEnsembleErr: any) {
+        console.log("[Omega Ensemble OpenRouter error]:", orEnsembleErr?.message || "failed");
+      }
+    }
   }
 
   // Graceful neural synthesis fallback (cached for only 15 seconds to allow quick recovery once quota re-opens)
@@ -3057,7 +3123,20 @@ ${candidatesContext}
   return res.json({ ok: true, text: fallbackDeduction, deduced: true, fallback: true });
 });
 
-// Server-side model completion
+// Map internal model IDs to OpenRouter model strings
+function getOpenRouterModelId(modelId: string): string | null {
+  const mapping: Record<string, string> = {
+    "deepseek-r1-compat": "deepseek/deepseek-r1",
+    "claude-3-5-sonnet-compat": "anthropic/claude-3.5-sonnet",
+    "gpt-4o-compat": "openai/gpt-4o",
+    "llama-3-3-compat": "meta-llama/llama-3.3-70b-instruct",
+    "qwen-2-5-compat": "qwen/qwen-2.5-72b-instruct",
+    "grok-compat": "x-ai/grok-beta",
+  };
+  return mapping[modelId] || null;
+}
+
+// Server-side model completion // OMEGA_READY_FOR_OPENROUTER
 app.post("/api/omega/complete", async (req, res) => {
   cleanCaches();
   const {
@@ -3088,71 +3167,40 @@ app.post("/api/omega/complete", async (req, res) => {
     });
   }
 
+
   // Dynamic system context with accurate live date/time
   const dynamicSystemContext = getOmegaSystemContext();
+  const qwenSys = `${OMEGA_SYSTEM_CONTEXT}\nYou represent the Qwen 2.5 Compute Server.`;
+  const llamaSys = `${OMEGA_SYSTEM_CONTEXT}\nYou represent the Meta Llama 3.3 Server.`;
 
-  // 1. Try Direct External Server Connections if appropriate keys or endpoints are present
-  // Priority: User passed keys -> Environment Variables
+  // 1. Try Direct External Server Connections
   const openrouterKey = keys.openrouterApiKey || process.env.OPENROUTER_API_KEY;
   const groqKey = keys.groqApiKey || process.env.GROQ_API_KEY;
-  const dashscopeKey = keys.dashscopeApiKey || process.env.DASHSCOPE_API_KEY;
   const deepseekKey = keys.deepseekApiKey || process.env.DEEPSEEK_API_KEY;
-  const openaiKey = keys.openaiApiKey || process.env.OPENAI_API_KEY;
-  const anthropicKey = keys.anthropicApiKey || process.env.ANTHROPIC_API_KEY;
-  const xaiKey = keys.xaiApiKey || process.env.XAI_API_KEY || process.env.GROK_API_KEY;
   const ollamaBaseUrl = keys.ollamaBaseUrl || process.env.OLLAMA_BASE_URL;
 
-  // Real Qwen 2.5 direct server invocation
+  if (openrouterKey) {
+    const orResult = await handleOpenRouterRequest(
+      modelId,
+      messages,
+      temperature,
+      maxTokens,
+      dynamicSystemContext,
+      openrouterKey
+    );
+    if (orResult) {
+      return res.json({ 
+        ok: true, 
+        text: orResult.text, 
+        modelId, 
+        tokensUsed: Math.round(orResult.text.length / 4), 
+        provider: orResult.provider 
+      });
+    }
+  }
+
+  // Fallback to existing specific direct blocks...
   if (modelId === "qwen-2-5-compat") {
-    const qwenSys = `${OMEGA_SYSTEM_CONTEXT}\nYou represent the Qwen 2.5 Compute Server (Alibaba Cloud). Provide deep algorithmic formulation, robust code examples, and mathematically sound explanations.`;
-    if (dashscopeKey) {
-      try {
-        const text = await callOpenAICompatibleApi(
-          "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
-          dashscopeKey,
-          "qwen2.5-72b-instruct",
-          qwenSys,
-          messages,
-          temperature,
-          maxTokens
-        );
-        return res.json({ ok: true, text, modelId, tokensUsed: Math.round(text.length / 4), provider: "Alibaba DashScope (Direct)" });
-      } catch (e: any) {
-        console.log("[Qwen DashScope direct]:", e?.message || "unavailable");
-      }
-    }
-    if (openrouterKey) {
-      try {
-        const text = await callOpenAICompatibleApi(
-          "https://openrouter.ai/api/v1/chat/completions",
-          openrouterKey,
-          "qwen/qwen-2.5-72b-instruct",
-          qwenSys,
-          messages,
-          temperature,
-          maxTokens
-        );
-        return res.json({ ok: true, text, modelId, tokensUsed: Math.round(text.length / 4), provider: "OpenRouter Qwen (Direct)" });
-      } catch (e: any) {
-        console.log("[Qwen OpenRouter direct]:", e?.message || "unavailable");
-      }
-    }
-    if (groqKey) {
-      try {
-        const text = await callOpenAICompatibleApi(
-          "https://api.groq.com/openai/v1/chat/completions",
-          groqKey,
-          "qwen-2.5-32b",
-          qwenSys,
-          messages,
-          temperature,
-          maxTokens
-        );
-        return res.json({ ok: true, text, modelId, tokensUsed: Math.round(text.length / 4), provider: "Groq Qwen (Direct)" });
-      } catch (e: any) {
-        console.log("[Qwen Groq direct]:", e?.message || "unavailable");
-      }
-    }
     if (ollamaBaseUrl) {
       try {
         const text = await callOpenAICompatibleApi(
@@ -3505,7 +3553,33 @@ app.post("/api/omega/complete", async (req, res) => {
       groundingUrls,
     });
   } catch (error: any) {
-    console.log(`[Omega complete]: Rate limit handled for ${modelId}, generating specialized neural synthesis.`);
+    console.log(`[Omega complete]: Rate limit / Gemini error for ${modelId} (${error?.message || ""}), checking OpenRouter...`);
+    if (openrouterKey) {
+      try {
+        const orFallbackModel = OPENROUTER_MODEL_MAP[modelId] || "meta-llama/llama-3.3-70b-instruct";
+        const orText = await callOpenAICompatibleApi(
+          "https://openrouter.ai/api/v1/chat/completions",
+          openrouterKey,
+          orFallbackModel,
+          dynamicSystemContext,
+          messages,
+          temperature,
+          maxTokens
+        );
+        if (orText) {
+          return res.json({
+            ok: true,
+            text: orText,
+            modelId,
+            tokensUsed: Math.round(orText.length / 4),
+            provider: `OpenRouter (${orFallbackModel})`,
+          });
+        }
+      } catch (orErr: any) {
+        console.log("[Omega complete OpenRouter fallback error]:", orErr?.message || "failed");
+      }
+    }
+
     const fallbackText = synthesizeIntelligentResponse(modelId, lastUserMsg, attachments);
     completeCache.set(cacheKey, { timestamp: Date.now() - 1000 * 60 * 4.75, text: fallbackText });
 
