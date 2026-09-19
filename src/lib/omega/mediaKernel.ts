@@ -170,10 +170,20 @@ export class OmegaMediaKernel {
   /** كشف تلقائي لنوع الوسائط المطلوبة من نص السؤال */
   detectMediaIntent(question: string): MediaType[] {
     const q = question.toLowerCase();
+    
+    // Explicit priority: if video is mentioned, prefer video over image
+    // unless explicitly asked for both.
+    const isVideo = /(فيديو|مقطع|video|animate|حرك)/i.test(q);
+    const isImage = /(صورة|صور|ارسم|ولد صورة|generate image|draw)/i.test(q);
+    
     const types: MediaType[] = [];
 
-    if (/(صورة|صور|ارسم|ولد صورة|generate image|draw)/i.test(q)) types.push("image");
-    if (/(فيديو|مقطع|video|animate|حرك)/i.test(q)) types.push("video");
+    if (isVideo) {
+      types.push("video");
+    } else if (isImage) {
+      types.push("image");
+    }
+
     if (/(صوت|تكلم|اقرأ|voice|speak|audio|narrat)/i.test(q)) types.push("voice");
     if (/(موسيقى|music|لحن)/i.test(q)) types.push("music");
 
