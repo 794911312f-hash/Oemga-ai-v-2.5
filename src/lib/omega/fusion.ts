@@ -141,7 +141,7 @@ async function gatherCandidates(
   const ok: { modelId: ModelId; text: string }[] = results
     .filter(
       (r): r is PromiseFulfilledResult<{ id: ModelId; res: any }> =>
-        r.status === "fulfilled" && r.value.res.ok && r.value.res.text.trim()
+        r.status === "fulfilled" && !!r.value.res.ok && Boolean(r.value.res.text?.trim())
     )
     .map((r) => ({ modelId: r.value.id, text: r.value.res.text.trim() }));
 

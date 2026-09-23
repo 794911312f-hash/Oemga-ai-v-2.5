@@ -12,6 +12,8 @@ import {
   LogIn,
   ExternalLink,
   Calculator,
+  Cpu,
+  Sparkles,
 } from "lucide-react";
 import { OmegaMark } from "./OmegaMark";
 import { ModelBar } from "./ModelBar";
@@ -21,11 +23,13 @@ import { MemoryView } from "./MemoryView";
 import { LineageView } from "./LineageView";
 import { OptimizerLab } from "./OptimizerLab";
 import { SymbolicCASWorkbench } from "./SymbolicCASWorkbench";
+import { AdvancedOrchestratorLab } from "./AdvancedOrchestratorLab";
+import { OmegaEvolutionLab } from "./OmegaEvolutionLab";
 import { AuthModal, type OmegaUser } from "./AuthModal";
 import { DEFAULT_OMEGA_CONFIG, type OmegaConfig } from "../../lib/omega/optimizer";
 import type { FusionResult } from "../../lib/omega/fusion";
 
-export type NavTab = "chat" | "kernel" | "memory" | "lineage" | "optimizer" | "cas";
+export type NavTab = "chat" | "kernel" | "memory" | "lineage" | "optimizer" | "cas" | "orchestrator" | "evolution";
 
 export const AppShell: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>("chat");
@@ -102,6 +106,18 @@ export const AppShell: React.FC = () => {
       label: "الحساب الرمزي والنظم (SymPy)",
       subLabel: "Symbolic CAS",
       icon: Calculator,
+    },
+    {
+      id: "orchestrator" as NavTab,
+      label: "الوكلاء المتقدمون والمحاكاة",
+      subLabel: "Orchestrator Lab",
+      icon: Cpu,
+    },
+    {
+      id: "evolution" as NavTab,
+      label: "التطور الذاتي للنواة",
+      subLabel: "Self-Evolving Core",
+      icon: Sparkles,
     },
   ];
 
@@ -237,6 +253,8 @@ export const AppShell: React.FC = () => {
             <SymbolicCASWorkbench />
           </div>
         )}
+        {activeTab === "orchestrator" && <AdvancedOrchestratorLab />}
+        {activeTab === "evolution" && <OmegaEvolutionLab />}
       </main>
 
       {/* Email Authentication Security Modal */}
