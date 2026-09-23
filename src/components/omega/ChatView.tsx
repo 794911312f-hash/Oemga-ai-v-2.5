@@ -950,11 +950,26 @@ export const ChatView: React.FC<ChatViewProps> = ({
     setCurrentStep("توجيه المجال المعرفي واختيار النماذج...");
 
     try {
-      // Recall past context from previous conversations if relevant
+      // Recall past context from previous conversations and Firestore RAG if relevant
       const pastContext = findRelevantPastContext(userMsgContent, activeSessionId);
-      const contextualPrompt = pastContext
-        ? `[تذكّر من محادثات سابقة ذات صلة: "${pastContext}"]\n\n${userMsgContent}`
-        : userMsgContent;
+      let firestoreContext = "";
+      try {
+        const expRes = await fetch("/api/omega/experience/context", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: "user_main", question: userMsgContent }),
+        });
+        if (expRes.ok) {
+          const expData = await expRes.json();
+          if (expData.context) firestoreContext = expData.context;
+        }
+      } catch {}
+
+      let combinedContext = "";
+      if (pastContext) combinedContext += `[تذكّر من محادثات سابقة ذات صلة: "${pastContext}"]\n\n`;
+      if (firestoreContext) combinedContext += `[خبرات مسترجعة من Firestore]:\n${firestoreContext}\n\n`;
+
+      const contextualPrompt = combinedContext ? `${combinedContext}${userMsgContent}` : userMsgContent;
 
       // Build recent history for fusion
       const history = newMessages
@@ -982,9 +997,28 @@ export const ChatView: React.FC<ChatViewProps> = ({
         },
       });
 
-      // Update Omega kernel and evolutionary lineage
+      // Update Omega kernel, lineage, and real Firestore self-evolution
       globalOmegaKernel.absorb(userMsgContent, result.candidates);
       globalOmegaLineage.recordStep(userMsgContent, result);
+
+      try {
+        const top = result.candidates[0];
+        fetch("/api/omega/evolve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: "user_main",
+            userMessage: userMsgContent,
+            assistantResponse: result.finalText,
+            domain: result.domain,
+            topPsi: top?.psi ?? 0.8,
+            verificationPassed: result.verification ? result.verification.verified : true,
+            chosenModelId: result.chosenModelId,
+            candidatesCount: result.candidates.length,
+            spread: result.telemetry?.spread ?? 0.1,
+          }),
+        }).catch(() => {});
+      } catch {}
 
       setMessages((prev) =>
         prev.map((msg) =>

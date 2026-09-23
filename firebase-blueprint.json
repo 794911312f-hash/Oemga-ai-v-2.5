@@ -1,0 +1,71 @@
+{
+  "entities": {
+    "EvolutionState": {
+      "title": "Evolution State",
+      "description": "State of Omega Kernel self-evolution per user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "generation": { "type": "number" },
+        "totalInteractions": { "type": "number" },
+        "successfulVerifications": { "type": "number" },
+        "failedVerifications": { "type": "number" },
+        "domainStats": { "type": "object" },
+        "learnedConfig": { "type": "object" },
+        "learnedInvariants": { "type": "array", "items": { "type": "string" } },
+        "lastUpdated": { "type": "number" }
+      },
+      "required": ["userId", "generation", "totalInteractions"]
+    },
+    "EvolutionExperience": {
+      "title": "Evolution Experience",
+      "description": "Historical experience from interaction for self-learning",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "question": { "type": "string" },
+        "finalAnswer": { "type": "string" },
+        "domain": { "type": "string" },
+        "topPsi": { "type": "number" },
+        "verificationPassed": { "type": "boolean" },
+        "chosenModelId": { "type": "string" },
+        "candidatesCount": { "type": "number" },
+        "spread": { "type": "number" },
+        "timestamp": { "type": "number" },
+        "embedding": { "type": "array", "items": { "type": "number" } }
+      },
+      "required": ["userId", "question", "finalAnswer", "domain", "topPsi", "timestamp"]
+    },
+    "MemoryItem": {
+      "title": "Long Term Memory Item",
+      "description": "Vector-indexed memory items for deep recall",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "topic": { "type": "string" },
+        "content": { "type": "string" },
+        "domain": { "type": "string" },
+        "confidence": { "type": "number" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "embedding": { "type": "array", "items": { "type": "number" } },
+        "accessCount": { "type": "number" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["userId", "content", "timestamp"]
+    }
+  },
+  "firestore": {
+    "omega_evolution": {
+      "entity": "EvolutionState",
+      "description": "Stores kernel evolution state per user"
+    },
+    "omega_experiences": {
+      "entity": "EvolutionExperience",
+      "description": "Stores interaction experiences for semantic recall and learning"
+    },
+    "omega_memory": {
+      "entity": "MemoryItem",
+      "description": "Stores persistent long-term memories"
+    }
+  }
+}
