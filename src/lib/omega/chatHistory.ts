@@ -258,6 +258,18 @@ export function renameSession(sessionId: string, newTitle: string): void {
   updateSession(sessionId, (s) => ({ ...s, title: newTitle.trim() || s.title }));
 }
 
+const STOP_WORDS = new Set([
+  "اليوم", "الان", "الآن", "امس", "أمس", "غدا", "غداً", "ما", "ماذا", "من", "اين", "أين",
+  "متى", "كيف", "كم", "هل", "لماذا", "في", "على", "إلى", "الى", "عن", "مع", "هذا", "هذه",
+  "ذلك", "تلك", "هنا", "هناك", "التي", "الذي", "الذين", "اللواتي", "كان", "كانت", "يكون",
+  "تكون", "هو", "هي", "هم", "نحن", "أنا", "انت", "أنت", "انتم", "آخر", "اخر", "كل", "جميع",
+  "بعض", "غير", "بين", "حول", "ضد", "نحو", "مثل", "أو", "او", "ثم", "بل", "لكن", "أن", "ان",
+  "إن", "قد", "لقد", "سوف", "سي", "لن", "لم",
+  "the", "is", "at", "which", "on", "a", "an", "and", "or", "in", "to", "for", "of", "with",
+  "today", "now", "yesterday", "what", "where", "when", "how", "who", "why", "this", "that",
+  "these", "those", "from", "by", "about", "into", "over", "after"
+]);
+
 /**
  * Cross-conversation memory recall:
  * Searches across past conversations to find relevant thoughts, facts, or topics
@@ -287,13 +299,15 @@ export function findRelevantPastContext(
   const otherSessions = sessions.filter((s) => s.id !== currentSessionId);
   if (otherSessions.length === 0 || !query || query.length < 3) return "";
 
+  // Filter out stop words so queries like "ما آخر الاخبار في الجزائر اليوم" don't accidentally match on "اليوم"
   const queryTokens = query
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, "")
     .split(/\s+/)
-    .filter((t) => t.length > 2);
+    .filter((t) => t.length > 2 && !STOP_WORDS.has(t));
 
-  if (queryTokens.length === 0) return "";
+  // Must have at least 2 substantive non-stopword tokens to warrant cross-conversation recall
+  if (queryTokens.length < 2) return "";
 
   const matches: { sessionId: string; sessionTitle: string; excerpt: string; score: number }[] = [];
 
@@ -309,7 +323,8 @@ export function findRelevantPastContext(
       }
       if (matchCount > 0) {
         const score = matchCount / queryTokens.length;
-        if (score >= 0.25) {
+        // Require high substantive relevance (>= 0.6) to avoid cross-topic hallucination
+        if (score >= 0.6) {
           const excerpt = msg.content.length > 200 ? msg.content.slice(0, 200) + "..." : msg.content;
           matches.push({
             sessionId: session.id,

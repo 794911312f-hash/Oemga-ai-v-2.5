@@ -60,10 +60,11 @@ const DOMAIN_KEYWORDS: Record<Domain, string[]> = {
   news_social: [
     "news", "breaking", "social", "twitter", "tweet", "tweets", "x.com", "trending",
     "media", "politics", "current events", "now", "today", "facebook", "instagram", "tiktok",
-    "reuters", "aljazeera", "bbc", "trends", "happening", "grok", "xai", "elon",
-    "أخبار", "اخبار", "عاجل", "تواصل اجتماعي", "سوشيال ميديا", "تويتر", "منصة x", "تغريدة",
-    "تغريدات", "تريند", "ترند", "الحدث", "اليوم", "الآن", "مستجدات", "أحداث جارية",
-    "صحافة", "إعلام", "فيسبوك", "انستغرام", "تيك توك", "الجزيرة", "العربية", "غروك", "جروك"
+    "reuters", "aljazeera", "bbc", "trends", "happening", "grok", "xai", "elon", "algeria", "palestine",
+    "أخبار", "اخبار", "خبر", "عاجل", "تواصل اجتماعي", "سوشيال ميديا", "تويتر", "منصة x", "تغريدة",
+    "تغريدات", "تريند", "ترند", "الحدث", "اليوم", "الآن", "مستجدات", "أحداث جارية", "آخر الأخبار",
+    "اخر الاخبار", "أنباء", "صحافة", "إعلام", "فيسبوك", "انستغرام", "تيك توك", "الجزيرة", "العربية",
+    "غروك", "جروك", "الجزائر", "فلسطين", "مصر", "المغرب", "تونس", "السعودية", "العراق", "سوريا"
   ],
   general: [
     "who", "what", "where", "when", "how", "hello", "help", "summary", "explain", "analyze", "review",
@@ -74,50 +75,56 @@ const DOMAIN_KEYWORDS: Record<Domain, string[]> = {
 const DOMAIN_MODEL_PRIORITY: Record<Domain, ModelId[]> = {
   code: [
     "qwen-2-5-compat",
+    "llama-3-3-compat",
     "gemini-3.8-flash",
     "deepseek-r1-compat",
     "gemini-3.1-pro-preview",
   ],
   math_logic: [
     "qwen-2-5-compat",
+    "llama-3-3-compat",
     "deepseek-r1-compat",
     "gemini-3.8-flash",
     "omega-kernel-c1",
   ],
   science_factual: [
-    "gpt-4o-compat",
-    "gemini-3.8-flash",
-    "deepseek-r1-compat",
     "qwen-2-5-compat",
+    "llama-3-3-compat",
+    "gemini-3.8-flash",
+    "gpt-4o-compat",
     "claude-3-5-sonnet-compat",
+    "deepseek-r1-compat",
   ],
   creative_writing: [
     "llama-3-3-compat",
+    "qwen-2-5-compat",
     "claude-3-5-sonnet-compat",
     "gemini-3.8-flash",
     "gpt-4o-compat",
   ],
   philosophy_theology: [
-    "deepseek-r1-compat",
+    "llama-3-3-compat",
+    "qwen-2-5-compat",
     "claude-3-5-sonnet-compat",
+    "deepseek-r1-compat",
     "gpt-4o-compat",
     "gemini-3.8-flash",
-    "qwen-2-5-compat",
   ],
   news_social: [
     "grok-compat",
     "gemini-3.8-flash",
     "gpt-4o-compat",
     "llama-3-3-compat",
+    "claude-3-5-sonnet-compat",
   ],
   general: [
-    "grok-compat",
-    "gpt-4o-compat",
-    "gemini-3.8-flash",
-    "deepseek-r1-compat",
     "qwen-2-5-compat",
-    "claude-3-5-sonnet-compat",
     "llama-3-3-compat",
+    "gemini-3.8-flash",
+    "claude-3-5-sonnet-compat",
+    "gpt-4o-compat",
+    "deepseek-r1-compat",
+    "grok-compat",
   ],
 };
 

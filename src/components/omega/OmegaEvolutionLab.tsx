@@ -515,7 +515,8 @@ print("الجيل المتعلم:", response.omega.get("generation"))`;
                   <option value="deepseek/deepseek-r1">deepseek/deepseek-r1</option>
                   <option value="meta-llama/llama-3.3-70b-instruct">meta-llama/llama-3.3-70b-instruct</option>
                   <option value="qwen/qwen-2.5-72b-instruct">qwen/qwen-2.5-72b-instruct</option>
-                  <option value="anthropic/claude-3.5-sonnet">anthropic/claude-3.5-sonnet</option>
+                  <option value="anthropic/claude-sonnet-4.5">anthropic/claude-sonnet-4.5</option>
+                  <option value="x-ai/grok-4.3">x-ai/grok-4.3</option>
                 </select>
               </div>
             </div>

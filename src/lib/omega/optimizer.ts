@@ -28,10 +28,10 @@ export const DEFAULT_OMEGA_CONFIG: OmegaConfig = {
   directThreshold: 0.85,
   uncertainSpread: 0.10,
   temperature: 0.35,
-  maxTokens: 1024,
+  maxTokens: 550,
   maxModelsPerDomain: 3,
-  aggregatorModel: "gemini-3.8-flash",
-  verifierModel: "gemini-3.8-flash",
+  aggregatorModel: "qwen-2-5-compat",
+  verifierModel: "llama-3-3-compat",
   skipVerification: false,
   forcedEmbeddingSource: "auto",
 };
@@ -54,7 +54,7 @@ export const OPTIMIZER_PRESETS: OptimizerPreset[] = [
       directThreshold: 0.90,
       uncertainSpread: 0.14,
       temperature: 0.2,
-      verifierModel: "gemini-3.8-flash",
+      verifierModel: "llama-3-3-compat",
     },
   },
   {
@@ -66,8 +66,8 @@ export const OPTIMIZER_PRESETS: OptimizerPreset[] = [
       directThreshold: 0.78,
       uncertainSpread: 0.06,
       temperature: 0.4,
-      aggregatorModel: "gemini-3.8-flash",
-      verifierModel: "gemini-3.8-flash",
+      aggregatorModel: "qwen-2-5-compat",
+      verifierModel: "llama-3-3-compat",
     },
   },
   {
@@ -80,7 +80,7 @@ export const OPTIMIZER_PRESETS: OptimizerPreset[] = [
       uncertainSpread: 0.05,
       temperature: 0.6,
       maxModelsPerDomain: 4,
-      aggregatorModel: "gemini-3.8-flash",
+      aggregatorModel: "qwen-2-5-compat",
     },
   },
 ];

@@ -111,7 +111,7 @@ Respond in valid JSON only with keys:
   let score = 88;
   let passed = true;
   let critique = "Demonstrated sound reasoning and satisfied required domain invariants.";
-  let criticModel = "anthropic/claude-3.5-sonnet";
+  let criticModel = "anthropic/claude-sonnet-4.5";
 
   try {
     const rawCritique = await callModelFn(criticModel, criticSystem, criticPrompt);

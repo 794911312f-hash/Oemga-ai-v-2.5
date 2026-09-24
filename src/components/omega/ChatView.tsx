@@ -950,26 +950,27 @@ export const ChatView: React.FC<ChatViewProps> = ({
     setCurrentStep("توجيه المجال المعرفي واختيار النماذج...");
 
     try {
-      // Recall past context from previous conversations and Firestore RAG if relevant
-      const pastContext = findRelevantPastContext(userMsgContent, activeSessionId);
+      // Check if this is a live news, weather, or current events query where past physics/math memories must NOT be injected
+      const isNewsOrLiveQuery = /\b(خبر|أخبار|اخبار|حدث|أحداث|طقس|الطقس|الجزائر|اليوم|الآن|عاجل|news|breaking|weather|today|now)\b/i.test(userMsgContent);
+
+      let pastContext = "";
       let firestoreContext = "";
-      try {
-        const expRes = await fetch("/api/omega/experience/context", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: "user_main", question: userMsgContent }),
-        });
-        if (expRes.ok) {
-          const expData = await expRes.json();
-          if (expData.context) firestoreContext = expData.context;
-        }
-      } catch {}
 
-      let combinedContext = "";
-      if (pastContext) combinedContext += `[تذكّر من محادثات سابقة ذات صلة: "${pastContext}"]\n\n`;
-      if (firestoreContext) combinedContext += `[خبرات مسترجعة من Firestore]:\n${firestoreContext}\n\n`;
-
-      const contextualPrompt = combinedContext ? `${combinedContext}${userMsgContent}` : userMsgContent;
+      if (!isNewsOrLiveQuery) {
+        // Recall past context only for continuous ongoing topical discussions
+        pastContext = findRelevantPastContext(userMsgContent, activeSessionId);
+        try {
+          const expRes = await fetch("/api/omega/experience/context", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: "user_main", question: userMsgContent }),
+          });
+          if (expRes.ok) {
+            const expData = await expRes.json();
+            if (expData.context) firestoreContext = expData.context;
+          }
+        } catch {}
+      }
 
       // Build recent history for fusion
       const history = newMessages
@@ -980,7 +981,25 @@ export const ChatView: React.FC<ChatViewProps> = ({
           content: m.content,
         }));
 
-      const result = await fuseResponses(contextualPrompt, history, {
+      // If relevant past context exists, add it to history as a system note rather than polluting the raw user question
+      if (pastContext || firestoreContext) {
+        const memoryNotes = [
+          pastContext ? `[ذاكرة سياقية من جلسات سابقة: ${pastContext}]` : "",
+          firestoreContext ? `[معارف سابقة مسترجعة]:\n${firestoreContext}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+
+        if (memoryNotes) {
+          history.unshift({
+            role: "system" as any,
+            content: memoryNotes,
+          });
+        }
+      }
+
+      // Always pass the clean userMsgContent as the question so domain routing detects the true user intention
+      const result = await fuseResponses(userMsgContent, history, {
         directThreshold: config.directThreshold,
         uncertainSpread: config.uncertainSpread,
         temperature: config.temperature,
@@ -1594,7 +1613,84 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       <SignalMeter isProcessing={true} stepDetails={currentStep} />
                     </div>
                   ) : (
-                    <MathRenderer content={msg.content} />
+                    <>
+                      {/* Prominent Multi-Server Synergy Header */}
+                      {msg.fusionResult && msg.fusionResult.candidates && msg.fusionResult.candidates.length > 0 && (
+                        <div className="mb-3 pb-2.5 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-semibold bg-purple-950/70 border border-purple-500/40 text-purple-300">
+                              <Sparkles className="w-3 h-3 text-purple-400" />
+                              <span>الخوادم المساهمة ({msg.fusionResult.candidates.length}):</span>
+                            </span>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {msg.fusionResult.candidates.map((c, i) => {
+                                const isQwen = c.modelId.includes("qwen");
+                                const isLlama = c.modelId.includes("llama");
+                                const isGemini = c.modelId.includes("gemini");
+                                const isClaude = c.modelId.includes("claude");
+                                const isGpt = c.modelId.includes("gpt");
+                                const isDeepseek = c.modelId.includes("deepseek");
+
+                                const label = isQwen
+                                  ? "Qwen 2.5 72B"
+                                  : isLlama
+                                  ? "Llama 3.3 70B"
+                                  : isGemini
+                                  ? "Gemini 3.8"
+                                  : isClaude
+                                  ? "Claude 3.5"
+                                  : isGpt
+                                  ? "GPT-4o"
+                                  : isDeepseek
+                                  ? "DeepSeek R1"
+                                  : c.modelId;
+
+                                const badgeColor = isQwen
+                                  ? "bg-violet-950/80 text-violet-300 border-violet-500/50 shadow-sm shadow-violet-900/20"
+                                  : isLlama
+                                  ? "bg-indigo-950/80 text-indigo-300 border-indigo-500/50 shadow-sm shadow-indigo-900/20"
+                                  : isGemini
+                                  ? "bg-amber-950/80 text-amber-300 border-amber-500/50 shadow-sm shadow-amber-900/20"
+                                  : isClaude
+                                  ? "bg-orange-950/80 text-orange-300 border-orange-500/50"
+                                  : isGpt
+                                  ? "bg-emerald-950/80 text-emerald-300 border-emerald-500/50"
+                                  : isDeepseek
+                                  ? "bg-cyan-950/80 text-cyan-300 border-cyan-500/50"
+                                  : "bg-slate-800 text-slate-300 border-slate-700";
+
+                                return (
+                                  <span
+                                    key={i}
+                                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-[11px] font-mono border ${badgeColor}`}
+                                    title={`خادم حي متصل: توافق دلالي Ψ = ${(c.psi * 100).toFixed(0)}%`}
+                                  >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                    {label}
+                                    <span className="text-[10px] opacity-75">({(c.psi * 100).toFixed(0)}%)</span>
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          {msg.fusionResult.chosenModelId && (
+                            <span className="text-[11px] text-slate-400 font-mono">
+                              حسم الإجماع:{" "}
+                              <strong className="text-cyan-300 font-semibold">
+                                {msg.fusionResult.chosenModelId.includes("qwen")
+                                  ? "Qwen 2.5 72B"
+                                  : msg.fusionResult.chosenModelId.includes("llama")
+                                  ? "Meta Llama 3.3"
+                                  : msg.fusionResult.chosenModelId.includes("gemini")
+                                  ? "Gemini 3.8 Flash"
+                                  : msg.fusionResult.chosenModelId}
+                              </strong>
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      <MathRenderer content={msg.content} />
+                    </>
                   )}
                 </div>
 

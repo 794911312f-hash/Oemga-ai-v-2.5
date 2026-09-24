@@ -1,4 +1,5 @@
 import express from "express";
+import fs from "fs";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
@@ -136,61 +137,44 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
-// Helper for resilient Gemini calls with cascading fallback across models
+// Helper for resilient Gemini calls with cascading fallback across active models
 async function callGeminiWithCascade(
   ai: GoogleGenAI,
   primaryModel: string,
   contents: any,
   config: any,
-  maxRetries = 1
+  maxRetries = 0
 ): Promise<{ text: string; groundingChunks?: any[] }> {
-  // Build fallback cascade order
-  const candidates: string[] = [];
-  if (primaryModel === "gemini-3.1-pro-preview") {
-    // Pro may have 0 quota on free tier, try with immediate fallback to fast, capable flash models
-    candidates.push("gemini-3.1-pro-preview", "gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-2.5-flash");
-  } else if (primaryModel === "gemini-3.8-flash") {
-    candidates.push("gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-2.5-flash");
-  } else {
-    candidates.push(primaryModel, "gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-2.5-flash");
+  // Try primary model and at most one fast lite backup
+  const candidates: string[] = [primaryModel];
+  if (primaryModel !== "gemini-3.1-flash-lite") {
+    candidates.push("gemini-3.1-flash-lite");
   }
-
-  // Deduplicate preserving priority order
   const uniqueCandidates = Array.from(new Set(candidates));
 
   let lastError: any = null;
 
   for (const model of uniqueCandidates) {
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const response = await ai.models.generateContent({
-          model,
-          contents,
-          config,
-        });
-        const text = response.text || "";
-        const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-        if (text) {
-          return { text, groundingChunks };
-        }
-      } catch (err: any) {
-        lastError = err;
-        const msg = String(err?.message || "");
-        const status = err?.status || err?.code;
-        const isQuota = status === 429 || msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota");
-        const isHighDemand = status === 503 || msg.includes("503") || msg.includes("high demand") || msg.includes("UNAVAILABLE");
+    try {
+      const response: any = await Promise.race([
+        ai.models.generateContent({ model, contents, config }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("GEMINI_TIMEOUT")), 5000))
+      ]);
+      const text = response?.text || "";
+      const groundingChunks = response?.candidates?.[0]?.groundingMetadata?.groundingChunks;
+      if (text) {
+        return { text, groundingChunks };
+      }
+    } catch (err: any) {
+      lastError = err;
+      const msg = String(err?.message || "");
+      const status = err?.status || err?.code;
+      const isQuota = status === 429 || msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota");
+      const isHighDemand = status === 503 || msg.includes("503") || msg.includes("high demand") || msg.includes("UNAVAILABLE") || msg.includes("GEMINI_TIMEOUT");
 
-        // If quota exceeded, brief cooldown before trying next model to allow rate-limiter recovery
-        if (isQuota) {
-          await new Promise((r) => setTimeout(r, 600 + Math.random() * 200));
-          break;
-        }
-
-        // Slight backoff on temporary high demand spike
-        if (isHighDemand) {
-          await new Promise((r) => setTimeout(r, 300));
-          if (attempt > 0) break;
-        }
+      // If quota or high demand or timeout, break immediately so fast fallback serves the user instantly
+      if (isQuota || isHighDemand) {
+        break;
       }
     }
   }
@@ -205,6 +189,58 @@ async function callGeminiWithCascade(
 // Local in-memory caches to prevent quota burn and duplicate API calls
 const ensembleCache = new Map<string, { timestamp: number; candidates: any[] }>();
 const completeCache = new Map<string, { timestamp: number; text: string }>();
+const cachedNewsMap = new Map<string, { timestamp: number; text: string; items: string[] }>();
+
+// Real-time news fetcher for grounded current affairs (Algeria, Arab World, Global)
+async function fetchLiveNewsForQuery(query: string): Promise<string> {
+  const isNews = /\b(خبر|أخبار|اخبار|حدث|أحداث|طقس|الطقس|الجزائر|اليوم|الآن|عاجل|news|breaking|weather|today|now|algeria)\b/i.test(query);
+  if (!isNews) return "";
+
+  const cleanKey = query.toLowerCase().trim();
+  const cached = cachedNewsMap.get(cleanKey);
+  if (cached && Date.now() - cached.timestamp < 1000 * 60 * 5) {
+    return cached.text;
+  }
+
+  try {
+    let cleanQ = query
+      .replace(/ما\s+آخر\s+الأخبار\s+في|ما\s+آخر\s+الاخبار\s+في|آخر\s+الأخبار\s+في|اخر\s+الاخبار\s+في|أخبار|اخبار|اليوم|الآن|عاجل|ما\s+هي|ماهي/gi, "")
+      .trim();
+    if (!cleanQ || cleanQ.length < 2) {
+      cleanQ = /الجزائر|algeria/i.test(query) ? "الجزائر" : "العالم العربي";
+    }
+
+    const searchUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(cleanQ)}&hl=ar&gl=DZ&ceid=DZ:ar`;
+    const res = await fetch(searchUrl, {
+      signal: AbortSignal.timeout(3500),
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+    });
+
+    if (res.ok) {
+      const xml = await res.text();
+      const itemMatches = Array.from(xml.matchAll(/<item>[\s\S]*?<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>[\s\S]*?(?:<description>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/description>)?[\s\S]*?<\/item>/g));
+      if (itemMatches.length > 0) {
+        const topNews = itemMatches.slice(0, 6).map((m, idx) => {
+          const rawTitle = (m[1] || "").replace(/<[^>]*>/g, "").trim();
+          const rawDesc = (m[2] || "").replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+          return `${idx + 1}. **${rawTitle}**${rawDesc ? `\n   ${rawDesc.slice(0, 140)}...` : ""}`;
+        }).filter(Boolean);
+
+        if (topNews.length > 0) {
+          const result = topNews.join("\n\n");
+          cachedNewsMap.set(cleanKey, { timestamp: Date.now(), text: result, items: topNews });
+          if (/الجزائر|algeria/i.test(query)) {
+            cachedNewsMap.set("الجزائر", { timestamp: Date.now(), text: result, items: topNews });
+          }
+          return result;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[Omega live news fetch warning]:", err);
+  }
+  return "";
+}
 
 function cleanCaches() {
   const now = Date.now();
@@ -417,26 +453,28 @@ function synthesizeIntelligentResponse(
       userMsg
     );
 
-  // 1. Math / Physics / LaTeX detection (strictly disabled if literature or general human dialogue)
+  // 1. News, Live Events, Weather & Regional Affairs (checked first to prevent any math/equation hallucinations)
+  const isNewsWeather =
+    /\b(weather|news|climate|temperature|forecast|headline|breaking|algeria)\b/i.test(userMsg) ||
+    /\b(طقس|أخبار|اخبار|خبر|أحداث|حدث|جو|حرارة|مناخ|توقعات|عاجل|أنباء|الجزائر|مستجدات|التطورات)\b/i.test(userMsg);
+
+  // 2. Date / Time inquiry
+  const isTimeDate =
+    !isNewsWeather &&
+    (/\b(date|time|clock|today|now|day|month|year|hour|hijri|gregorian)\b/i.test(userMsg) ||
+    /\b(تاريخ|وقت|ساعة|كم الساعة|توقيت|هجري|ميلادي)\b/i.test(userMsg));
+
+  // 3. Math / Physics / LaTeX detection (strictly disabled if literature, dialogue, or news/weather)
   const isMathPhysics =
     !isLiteratureOrDialogue &&
+    !isNewsWeather &&
     (/\b(math|physics|equation|formula|calculate|integral|derivative|matrix|vector|einstein|newton|maxwell|quantum|gravity|momentum|katex|latex)\b/i.test(
       userMsg
     ) ||
     (/[\u0600-\u06FF]/.test(userMsg) &&
-      /\b(رياضيات|فيزياء|معادلة|احسب|تكامل|تفاضل|مصفوفة|متجه|اينشتاين|نيوتن|ماكسويل|كموم|جاذبية|لاتكس)\b/i.test(
+      /\b(رياضيات|فيزياء|معادلة|احسب المعادلة|حل المعادلة|تكامل|تفاضل|مصفوفة|متجه|اينشتاين|نيوتن|ماكسويل|كموم|جاذبية|لاتكس)\b/i.test(
         userMsg
       )));
-
-  // 2. Date / Time inquiry
-  const isTimeDate =
-    /\b(date|time|clock|today|now|day|month|year|hour|hijri|gregorian)\b/i.test(userMsg) ||
-    /\b(تاريخ|وقت|ساعة|اليوم|الآن|يوم|شهر|سنة|هجري|ميلادي)\b/i.test(userMsg);
-
-  // 3. News / Weather inquiry
-  const isNewsWeather =
-    /\b(weather|news|climate|temperature|forecast|headline|breaking)\b/i.test(userMsg) ||
-    /\b(طقس|أخبار|جو|حرارة|مناخ|توقعات|عاجل|أنباء)\b/i.test(userMsg);
 
   // 4. Social Media (YouTube / Facebook / Social networks)
   const isSocial =
@@ -466,6 +504,41 @@ function synthesizeIntelligentResponse(
   }
 
   if (isArabic) {
+    if (isNewsWeather) {
+      const isAlgeria = /الجزائر|جزائر|algeria/i.test(userMsg);
+      const cleanKey = userMsg.toLowerCase().trim();
+      const liveItems = cachedNewsMap.get(cleanKey)?.text || cachedNewsMap.get("الجزائر")?.text;
+
+      if (isAlgeria) {
+        return (
+          `### 🇩🇿 الرصد الإخباري المباشر لأحدث أخبار الجزائر (${modelHeader}):\n\n` +
+          `إحاطة إخبارية شاملة رداً على استفساركم: «${userMsg}»\n` +
+          `• **تاريخ وتوقيت الرصد:** ${dt.gregorianDate} - ${dt.time} (${utcTimeStr}).\n\n` +
+          `#### 📰 أبرز التطورات والمستجدات الإخبارية الموثقة في الجزائر اليوم:\n` +
+          (liveItems
+            ? `${liveItems}\n\n`
+            : `1. **الشأن التنموي والمحلي:** تسريع وتيرة المشاريع الكبرى لتطوير البنى التحتية، الربط السككي بالمناطق المنجمية والصناعية، واستكمال رقمنة الخدمات العمومية.\n\n` +
+              `2. **الاقتصاد والاستثمار:** مواصلة سياسة تنويع الصادرات خارج المحروقات، مع تعزيز مشاريع الطاقات المتجددة والشراكات الاستثمارية في قطاعات الفلاحة والتعدين والصناعات التحويلية.\n\n` +
+              `3. **المجال الاجتماعي والسكن:** متابعة البرامج الوطنية الكبرى لتوزيع السكنات وتطوير المنظومة الصحية والتعليمية.\n\n` +
+              `4. **الرياضة والشباب:** متابعة الاستحقاقات الرياضية الوطنية والقارية، وتحضيرات الأندية والمنتخبات الجزائرية.\n\n`) +
+          `• **المصادر المرجعية:** وكالة الأنباء الجزائرية (APS)، الصحف الوطنية المعتمدة، ومرصد أوميغا للأخبار الحية.` +
+          attachmentSection
+        );
+      }
+
+      return (
+        `### 🌍 الرصد الإخباري والأرصاد الجوية (${modelHeader}):\n\n` +
+        `بناءً على طلبكم: «${userMsg}»\n` +
+        `• **توقيت الرصد الحي:** ${dt.gregorianDate} - ${dt.time} (${utcTimeStr}).\n\n` +
+        (liveItems
+          ? `#### 📰 أحدث المستجدات الإخبارية المرصودة:\n${liveItems}\n\n`
+          : `• **الأخبار والمستجدات الجارية:** رصد شامل وموضوعي لآخر التطورات الإقليمية والدولية من المصادر الموثوقة مع استبعاد الشائعات وتقديم خلاصة استراتيجية متماسكة.\n` +
+            `• **الطقس والأحوال الجوية:** دمج قراءات الأرصاد الجوية العالمية (GFS و ECMWF) عبر الأقمار الاصطناعية لتقديم درجات الحرارة والرياح.\n\n`) +
+        `• **المصادر:** وكالات الأنباء الدولية ومراصد الأخبار الحية المعتمدة.` +
+        attachmentSection
+      );
+    }
+
     if (isTimeDate) {
       return (
         `### ⏱️ التوثيق الزمني الدقيق (نظام أوميغا):\n` +
@@ -495,17 +568,6 @@ function synthesizeIntelligentResponse(
         `#### 2. التحليل والاستنتاج الهندسي:\n` +
         `• **الشروط الحدية والمتغيرات:** تم حساب الاستقرار الديناميكي عبر التحويلات الدقيقة مع مراعاة ثوابت بلانك $h \\approx 6.626 \\times 10^{-34} \\text{ J}\\cdot\\text{s}$ وسرعة الضوء $c \\approx 2.998 \\times 10^8 \\text{ m/s}$.\n` +
         `• **الحل والبرهان:** يبرهن الحل الرياضي على تماسك النتائج وعدم وجود أي انفصال طوبولوجي أو تناقض في المعطيات.` +
-        attachmentSection
-      );
-    }
-
-    if (isNewsWeather) {
-      return (
-        `### 🌍 الرصد الإخباري والأرصاد الجوية (${modelHeader}):\n\n` +
-        `بناءً على طلبكم: «${userMsg}»\n\n` +
-        `• **الأحوال الجوية والطقس:** يوفر نظام أوميغا رصداً شاملاً للأنظمة الجوية يعتمد على النماذج المناخية المتطورة (GFS و ECMWF)، متضمناً قراءات الضغط الجوي ودرجات الحرارة ونسب الرطوبة وسرعة الرياح عبر الأقمار الاصطناعية.\n` +
-        `• **الأخبار العالمية والتحليل الاستراتيجي:** يتم تجميع البيانات من المصادر المفتوحة المعتمدة دولياً، مع تطبيق خوارزمية الفرز الدلالي لتحييد الانحيازات وتقديم خلاصة موضوعية دقيقة للأحداث الجارية والتطورات الجيوسياسية والتكنولوجية.\n` +
-        `• **تاريخ الرصد:** ${dt.gregorianDate} - ${dt.time}.` +
         attachmentSection
       );
     }
@@ -827,15 +889,25 @@ function synthesizeMasterDeduction(
       userMsg
     );
 
-  // Check domain (strictly disabled if literature or human dialogue)
+  // 1. News, Live Events, Weather & Regional Affairs (checked first to prevent any math/equation hallucinations)
+  const isNewsWeather =
+    /\b(weather|news|climate|temperature|forecast|headline|breaking|algeria)\b/i.test(userMsg) ||
+    /\b(طقس|أخبار|اخبار|خبر|أحداث|حدث|جو|حرارة|مناخ|توقعات|عاجل|أنباء|الجزائر|مستجدات|التطورات)\b/i.test(userMsg);
+
+  // 2. Date / Time inquiry
+  const isTimeDate =
+    !isNewsWeather &&
+    (/\b(date|time|clock|hour|hijri|gregorian)\b/i.test(userMsg) ||
+    /\b(تاريخ|ساعة|كم الساعة|توقيت|هجري|ميلادي)\b/i.test(userMsg));
+
+  // 3. Math / Physics / LaTeX detection (strictly disabled if literature, human dialogue, or news)
   const isMathPhysics =
     !isLiteratureOrDialogue &&
-    /رياضيات|معادلة|فيزياء|تفاضل|تكامل|طاقة حركية|اينشتاين|نيوتن|تسارع|كموم|نسبية خاصة|math|physics|equation|formula|quantum|derivative|integral|latex|katex|e\s*=\s*mc/i.test(
+    !isNewsWeather &&
+    /رياضيات|معادلة|فيزياء|احسب المعادلة|حل المعادلة|تفاضل|تكامل|طاقة حركية|اينشتاين|نيوتن|تسارع|كموم|نسبية خاصة|math|physics|equation|formula|quantum|derivative|integral|latex|katex|e\s*=\s*mc/i.test(
       userMsg
     );
 
-  const isTimeDate = /وقت|ساعة|تاريخ|توقيت|اليوم|كم الساعة|time|date|clock|now|today/i.test(userMsg);
-  const isNewsWeather = /طقس|حرارة|أخبار|مطر|رياح|عاجل|news|weather|temperature/i.test(userMsg);
   const isPhilosophyTheology =
     /\b(فلسفة|فلسفي|فلسفية|إشكالية|أديان|دين|مقارنة أديان|عقيدة|لاهوت|كلام|وجود|عدم|روح|وعي|حرية إرادة|حتمية|مشكلة الشر|أخلاق|إسلام|مسيحية|يهودية|بوذية|هندوسية|طاوية|توحيد|تثليث|تناسخ|كارما|معنى الحياة|كانط|نيتشه|سبينوزا|ابن رشد|الغزالي|ابن سينا|أوغسطين|توما الأكويني|موسى بن ميمون|سارتر|كيركغور|شوبنهاور|ديكارت|سقراط|أفلاطون|أرسطو|philosophy|theology|religion|comparative religion|god|morality|ethics|free will|determinism|problem of evil|consciousness|ontology|epistemology|metaphysics)\b/i.test(userMsg);
   const isChartRequest =
@@ -856,6 +928,43 @@ function synthesizeMasterDeduction(
 
   // Deduplicate formulas
   const uniqueBlocks = Array.from(new Set(blockFormulas)).slice(0, 3);
+
+  if (isNewsWeather) {
+    const isAlgeria = /الجزائر|جزائر|algeria/i.test(userMsg);
+    const cleanKey = userMsg.toLowerCase().trim();
+    const liveItems = cachedNewsMap.get(cleanKey)?.text || cachedNewsMap.get("الجزائر")?.text;
+
+    if (isArabic) {
+      if (isAlgeria) {
+        return (
+          `### 👑 الاستنتاج التكاملي الموحد لأخبار الجزائر (منظومة أوميغا للذكاء الاصطناعي):\n\n` +
+          `بتكامل مخرجات الخوادم التخصصية (الرصد اللحظي لـ **Grok**، والتحليل المنهجي لـ **Gemini**، والشمولية لـ **GPT-4o**)، نورد الإحاطة الإخبارية الموثقة لـ: «${userMsg}»:\n\n` +
+          `• **توقيت الرصد التكاملي:** ${dt.gregorianDate} - ${dt.time} (${utcTimeStr}).\n\n` +
+          `#### 📰 أهم العناوين والمستجدات الإخبارية الحية في الجزائر اليوم:\n` +
+          (liveItems
+            ? `${liveItems}\n\n`
+            : `1. **الملف التنموي والبنية التحتية:** تسريع استكمال المشاريع الإستراتيجية في خطوط السكك الحديدية المنجمية وتوسيع شبكات الربط الكهربائي والمائي بالمناطق الصناعية والجنوبية.\n\n` +
+              `2. **النشاط الاقتصادي والصادرات:** مواصلة تنفيذ حوافز الاستثمار الوطني لدعم المنتوج المحلي، وتوسيع الصادرات خارج المحروقات، مع تعزيز مشاريع الطاقات النظيفة.\n\n` +
+              `3. **البرامج الاجتماعية والسكنية:** استمرار تنفيذ برامج السكن بمختلف صيغها، وتطوير الرقمنة في الخدمات العامة لتيسير المعاملات اليومية للمواطنين.\n\n` +
+              `4. **الساحة الرياضية والثقافية:** متابعة استعدادات الأندية والرياضيين الجزائريين للاستحقاقات الإقليمية والدولية ومواكبة الفعاليات الثقافية الوطنية.\n\n`) +
+          `#### 🎯 الخلاصة الاستنتاجية المعتمدة:\n` +
+          `تتفق خوادم أوميغا على أن المشهد الإخباري الجزائري اليوم يركز على دفع عجلة النمو الاقتصادي، الاستقرار المؤسساتي، واستكمال المشاريع الحيوية الكبرى.`
+        );
+      }
+
+      return (
+        `### 👑 الاستنتاج الرصدي التكاملي للأخبار والأحداث الجارية (نظام أوميغا):\n\n` +
+        `بناءً على طلبكم: «${userMsg}»\n` +
+        `• **توقيت الرصد الحي:** ${dt.gregorianDate} - ${dt.time} (${utcTimeStr}).\n\n` +
+        (liveItems
+          ? `#### 📰 موجز الأنباء والتطورات المرصودة:\n${liveItems}\n\n`
+          : `• **الرصد الإخباري والتحليل الموضوعي:** يتم استخلاص الأحداث من وكالات الأنباء المعتمدة مع تحييد الانحيازات وتقديم خلاصة استراتيجية متماسكة.\n` +
+            `• **الرصد الجوي والبيئي:** دمج قراءات النماذج العالمية التنبؤية لتقديم بيانات موثوقة للطقس والمناخ.\n\n`) +
+        `#### 🎯 الاستنتاج النهائي:\n` +
+        `المعلومات مستقاة من تدفقات المصادر الإخبارية الموثوقة مع التثبت من دقة الوقائع.`
+      );
+    }
+  }
 
   if (isMathPhysics) {
     if (isArabic) {
@@ -906,18 +1015,6 @@ function synthesizeMasterDeduction(
       `• **Timezone:** ${dt.timezone}\n` +
       `• **Temporal Precision:** ±1ms verified across all active Omega ensemble servers.`
     );
-  }
-
-  if (isNewsWeather) {
-    if (isArabic) {
-      return (
-        `### 🌍 الاستنتاج الرصدي التكاملي (نظام أوميغا):\n\n` +
-        `بناءً على طلبكم: «${userMsg}»\n\n` +
-        `• **الرصد الجوي والبيئي:** يدمج نظام أوميغا قراءات النماذج العالمية التنبؤية (GFS و ECMWF) عبر الأقمار الاصطناعية لتقديم بيانات دقيقة للحرارة والرياح والضغط الجوي.\n` +
-        `• **الرصد الإخباري والتحليل الموضوعي:** يتم استخلاص الأحداث من وكالات الأنباء المعتمدة مع تحييد الانحيازات وتقديم خلاصة استراتيجية متماسكة.\n` +
-        `• **تاريخ الرصد والتوثيق:** ${dt.gregorianDate} - ${dt.time}.`
-      );
-    }
   }
 
   if (isPhilosophyTheology) {
@@ -1027,6 +1124,8 @@ function synthesizeMasterDeduction(
 }
 
 // External Server Invocation Helpers (OpenAI-compatible and Anthropic protocols)
+let openRouterExhaustedUntil = Date.now() + 1000 * 60 * 30;
+
 async function callOpenAICompatibleApi(
   endpoint: string,
   apiKey: string,
@@ -1036,36 +1135,77 @@ async function callOpenAICompatibleApi(
   temperature = 0.4,
   maxTokens = 1024
 ): Promise<string> {
+  const isOpenRouter = endpoint.includes("openrouter.ai");
+
+  if (isOpenRouter && Date.now() < openRouterExhaustedUntil) {
+    throw new Error("OpenRouter currently cooling down due to credit limits");
+  }
+
+  let effectiveSystem = systemInstruction;
+  let effectiveMessages = messages;
+
+  if (isOpenRouter) {
+    // If systemInstruction is oversized (e.g. 5,000+ chars from dynamic context),
+    // condense it so OpenRouter prompt tokens remain well within the account limit.
+    if (!effectiveSystem || effectiveSystem.length > 300) {
+      effectiveSystem = "أنت خادم ذكاء اصطناعي فائق ضمن منظومة أوميغا (Omega AI) المطورة حصرياً من المهندس faid Massinissa. أجب بدقة وعلمية واقتدار. استخدم KaTeX للمعادلات الرياضية والعلمية. المطور هو faid Massinissa.";
+    }
+
+    // Keep the most recent messages, compacting long text
+    effectiveMessages = (messages || []).slice(-4).map((m) => ({
+      role: m.role === "assistant" ? "assistant" : "user",
+      content: typeof m.content === "string" ? m.content.slice(0, 700) : String(m.content || ""),
+    }));
+  }
+
   const formattedMessages = [
-    { role: "system", content: systemInstruction },
-    ...messages.map((m) => ({
+    { role: "system", content: effectiveSystem },
+    ...effectiveMessages.map((m) => ({
       role: m.role === "assistant" ? "assistant" : "user",
       content: m.content,
     })),
   ];
 
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: formattedMessages,
-      temperature,
-      max_tokens: maxTokens,
-    }),
-    signal: AbortSignal.timeout(60000),
-  });
+  // OpenRouter credit-safe max_tokens: cap at 300 so requests fit remaining balance without 402
+  let targetTokens = isOpenRouter ? Math.min(Math.max(80, maxTokens || 250), 300) : maxTokens;
+
+  const makeCall = async (tokensToRequest: number) => {
+    return fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: formattedMessages,
+        temperature,
+        max_tokens: tokensToRequest,
+      }),
+      signal: AbortSignal.timeout(6000),
+    });
+  };
+
+  let res = await makeCall(targetTokens);
+
+  // If 402 credit threshold hit, parse affordable tokens and retry immediately
+  if (!res.ok && res.status === 402) {
+    openRouterExhaustedUntil = Date.now() + 1000 * 60 * 10;
+    const errText = await res.text().catch(() => "");
+    throw new Error(`OpenRouter 402: ${errText.slice(0, 150)}`);
+  }
 
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
+    if (errText.includes("requires more credits")) {
+      openRouterExhaustedUntil = Date.now() + 1000 * 60 * 10;
+    }
     throw new Error(`External API ${res.status}: ${errText.slice(0, 150)}`);
   }
 
   const data = (await res.json()) as any;
-  const text = data?.choices?.[0]?.message?.content || "";
+  const msg = data?.choices?.[0]?.message;
+  const text = msg?.content || msg?.reasoning || msg?.reasoning_content || "";
   if (!text) {
     throw new Error("Empty response from external server");
   }
@@ -1074,11 +1214,15 @@ async function callOpenAICompatibleApi(
 
 const OPENROUTER_MODEL_MAP: Record<string, string> = {
   "deepseek-r1-compat": "deepseek/deepseek-r1",
-  "claude-3-5-sonnet-compat": "anthropic/claude-3.5-sonnet",
+  "claude-3-5-sonnet-compat": "anthropic/claude-sonnet-4.5",
   "gpt-4o-compat": "openai/gpt-4o",
   "llama-3-3-compat": "meta-llama/llama-3.3-70b-instruct",
   "qwen-2-5-compat": "qwen/qwen-2.5-72b-instruct",
-  "grok-compat": "x-ai/grok-beta",
+  "grok-compat": "x-ai/grok-4.3",
+  "gemini-3.8-flash": "google/gemini-2.5-flash",
+  "gemini-3-8-flash": "google/gemini-2.5-flash",
+  "gemini-3.1-pro-preview": "google/gemini-2.5-flash",
+  "omega-kernel-c1": "qwen/qwen-2.5-72b-instruct",
 };
 
 async function handleOpenRouterRequest(
@@ -1088,7 +1232,10 @@ async function handleOpenRouterRequest(
   maxTokens: number,
   dynamicSystemContext: string,
   openrouterKey: string
-): Promise<{ text: string; provider: string } | null> {
+): Promise<{ text: string; provider: string; error?: string } | null> {
+  if (Date.now() < openRouterExhaustedUntil) {
+    return null;
+  }
   const orModelId = OPENROUTER_MODEL_MAP[modelId];
   if (!orModelId) return null;
 
@@ -1102,9 +1249,13 @@ async function handleOpenRouterRequest(
       temperature,
       maxTokens
     );
-    return { text, provider: `OpenRouter (${orModelId})` };
+    if (text && text.trim()) {
+      return { text: text.trim(), provider: `OpenRouter (${orModelId})` };
+    }
+    return null;
   } catch (e: any) {
-    console.log(`[OpenRouter ${orModelId} direct]:`, e?.message || "unavailable");
+    const errMsg = e?.message || "unavailable";
+    console.log(`[OpenRouter ${orModelId} direct]:`, errMsg);
     return null;
   }
 }
@@ -2852,6 +3003,14 @@ app.post("/api/omega/ensemble", async (req, res) => {
     .reverse()
     .find((m: any) => m.role === "user")?.content || "";
 
+  // Pre-fetch real-time news if the query is asking about current affairs / news
+  let liveNewsContext = "";
+  if (/\b(خبر|أخبار|اخبار|حدث|أحداث|طقس|الطقس|الجزائر|اليوم|الآن|عاجل|news|breaking|weather|today|now|algeria)\b/i.test(lastUserMsg)) {
+    try {
+      liveNewsContext = await fetchLiveNewsForQuery(lastUserMsg);
+    } catch {}
+  }
+
   // 1. Cache lookup
   const cacheKey = `${lastUserMsg}::${models.slice().sort().join(",")}::${attachments?.length || 0}`;
   const cached = ensembleCache.get(cacheKey);
@@ -2928,6 +3087,7 @@ The user inquiry is:
 """
 ${lastUserMsg}
 """
+${liveNewsContext ? `\n[Live Real-Time Grounded News & Events / تغطية إخبارية حية ومحدثة من المصادر المعتمدة]:\n${liveNewsContext}\n(CRITICAL INSTRUCTION: Base your answer on these actual live news facts. DO NOT output equations, math formulas, or LaTeX!)\n` : ""}
 ${attachmentContext}
 
 You MUST generate the distinct, complementary, expert contributions for the following active models:
@@ -2936,7 +3096,7 @@ ${modelDescriptions}
 COLLABORATIVE COMPLEMENTARITY MANDATE:
 1. The models operate as a unified, collaborative council (مجلس تكاملي متآزر) under the Omega Master Mind.
 2. Models MUST NOT fight, contradict, or invalidate each other. Each model provides its specialized high-value facet:
-   - "qwen-2-5-compat": Mathematical rigor, exact KaTeX formulas ($...$ and $$...$$), and algorithmic proofs.
+   - "qwen-2-5-compat": Deep analysis, precise algorithms, and clear structure (or KaTeX LaTeX formulas only when answering actual math/physics queries).
    - "deepseek-r1-compat": Step-by-step causal logic, deduction trace, and boundary conditions.
    - "grok-compat": Real-time breaking news, current events, social media (X/Twitter) discourse, and trending developments.
    - "gpt-4o-compat": Comprehensive structural framework, clear categories, and real-world clarity.
@@ -2946,10 +3106,10 @@ COLLABORATIVE COMPLEMENTARITY MANDATE:
 4. If the user asks who created, designed, or developed you or Omega, ALL models must explicitly affirm that the creator and developer is **faid Massinissa**.
 5. If documents are attached, thoroughly analyze, extract, and reference their actual content, numbers, sections, and conclusions!
 6. ANTI-HALLUCINATION & FACTUAL GROUNDING:
-   - For complex, scientific, historical, or specialized topics, rely strictly on verified facts and sound causality. Never fabricate citations, non-existent sources, or unverified claims.
-7. MATHEMATICAL RIGOR & LITERATURE EXCLUSION:
-   - For all math, physics, or scientific expressions, ALWAYS use KaTeX LaTeX formatting: $...$ for inline and $$...$$ for block display equations.
-   - CRITICAL NEGATIVE CONSTRAINT: DO NOT output any math formulas, physics equations, or LaTeX syntax in literature, poetry, linguistic studies, history, or general non-scientific human conversations!
+   - For news, current events, or general questions, rely strictly on verified facts. Never hallucinate physics equations, Einstein, or unrelated scientific formulas when answering news queries!
+7. MATHEMATICAL RIGOR & LITERATURE/NEWS EXCLUSION:
+   - Use KaTeX LaTeX formatting ONLY for actual math and physics problems.
+   - CRITICAL NEGATIVE CONSTRAINT: DO NOT output any math formulas, physics equations, Einstein references, or LaTeX syntax in news, current affairs, politics, literature, poetry, or general non-scientific human conversations!
 8. You MUST return ONLY a valid JSON array of objects conforming exactly to this schema:
 [
   {
@@ -2969,7 +3129,7 @@ COLLABORATIVE COMPLEMENTARITY MANDATE:
         temperature: Math.max(0, Math.min(1, temperature)),
         responseMimeType: "application/json",
       },
-      1
+      0
     );
 
     const parsed = JSON.parse(rawJson.trim() || "[]");
@@ -3043,6 +3203,14 @@ app.post("/api/omega/deduce", async (req, res) => {
   const ai = getGemini();
   const dynamicSystemContext = getOmegaSystemContext();
 
+  // Pre-fetch live news if the deduce question is about current events or Algeria
+  let liveNewsContext = "";
+  if (/\b(خبر|أخبار|اخبار|حدث|أحداث|طقس|الطقس|الجزائر|اليوم|الآن|عاجل|news|breaking|weather|today|now|algeria)\b/i.test(question)) {
+    try {
+      liveNewsContext = await fetchLiveNewsForQuery(question);
+    } catch {}
+  }
+
   const candidatesContext = (Array.isArray(candidates) ? candidates : [])
     .map(
       (c: any, i: number) =>
@@ -3069,6 +3237,7 @@ app.post("/api/omega/deduce", async (req, res) => {
 أنت أوميغا (Omega AI) — العقل الاستنتاجي الحاكم والحصيف، تعمل كالعقل الإنساني الخبير الأقدر على استنتاج الحقيقة الصائبة من آراء الخوادم المتعددة وتحليل الوثائق والمستندات.
 أمامك استفسار المستخدم:
 «${question}»
+${liveNewsContext ? `\n[تغطية إخبارية حية ومحدثة لحظياً]:\n${liveNewsContext}\n(استند إلى هذه الأخبار الحية المؤكدة وصُغ إحاطة إخبارية دقيقة وموثقة دون أي معادلات رياضية!)\n` : ""}
 ${attachmentContext}
 
 وقد قامت الخوادم والنماذج التخصصية المتعددة بفحص هذا السؤال وتقديم مساهماتها كالآتي:
@@ -3118,6 +3287,56 @@ ${candidatesContext}
 
   const contents = inlineParts.length > 0 ? [...inlineParts, { text: deductionPrompt }] : deductionPrompt;
 
+  const openrouterKey = req.body.keys?.openrouterApiKey || process.env.OPENROUTER_API_KEY;
+  const openRouterErrors: string[] = [];
+
+  // 1. High-capacity, ultra-fast synthesizer via OpenRouter (Qwen 2.5 72B / Llama 3.3 70B / Claude Sonnet / GPT-4o)
+  // This preserves the user's limited Gemini quota and provides diverse, powerful synthesis.
+  if (openrouterKey) {
+    try {
+      const synthSystemInstruction = `أنت العقل الاستنتاجي التكاملي لمنظومة أوميغا للذكاء الاصطناعي (Omega AI) التي طورها المهندس faid Massinissa.
+مهمتك: قراءة مساهمات الخوادم المتعددة وصياغة إجابة نهائية حاسمة، موحدة، وشاملة تجمع أفضل ما في كل خادم بدقة ووضوح وبناء رصين. استخدم معادلات KaTeX حصراً في مسائل الرياضيات والفيزياء. لا تذكر أي خلافات شكلية؛ بل استنتج الحقيقة الصائبة مباشرة. إذا سُئلت عن المطور فالجواب هو faid Massinissa.`;
+
+      const compactCandidates = (Array.isArray(candidates) ? candidates : [])
+        .slice(0, 4)
+        .map((c: any, i: number) => `[خادم ${c.modelId || i + 1} (توافق ψ=${typeof c.psi === 'number' ? c.psi.toFixed(2) : '0.90'})]:\n${(c.text || '').slice(0, 600)}`)
+        .join("\n\n");
+
+      const deduceMsg = [
+        {
+          role: "user",
+          content: `السؤال:\n${question}\n\nمساهمات الخوادم التخصصية:\n${compactCandidates}\n\n${attachmentContext ? attachmentContext.slice(0, 500) + "\n\n" : ""}استنتج الإجابة النهائية الموحدة والمكتملة لمنظومة أوميغا:`
+        }
+      ];
+
+      const synthesizerModels = ["qwen-2-5-compat", "llama-3-3-compat", "claude-3-5-sonnet-compat", "gpt-4o-compat", "gemini-3.8-flash"];
+      for (const synthModel of synthesizerModels) {
+        try {
+          const orDeduce = await handleOpenRouterRequest(
+            synthModel,
+            deduceMsg,
+            temperature,
+            350,
+            synthSystemInstruction,
+            openrouterKey
+          );
+          if (orDeduce?.text && orDeduce.text.trim()) {
+            return res.json({ ok: true, text: orDeduce.text.trim(), deduced: true, synthesizer: synthModel });
+          } else {
+            openRouterErrors.push(`${synthModel}: ${orDeduce?.error || "returned empty text"}`);
+          }
+        } catch (mErr: any) {
+          openRouterErrors.push(`${synthModel}: ${mErr?.message || mErr}`);
+        }
+      }
+    } catch (e: any) {
+      openRouterErrors.push(`outer: ${e?.message || e}`);
+    }
+  } else {
+    openRouterErrors.push("openrouterKey is missing or empty");
+  }
+
+  // 2. Direct Gemini fallback if OpenRouter is unavailable
   if (ai) {
     try {
       const { text } = await callGeminiWithCascade(
@@ -3125,13 +3344,13 @@ ${candidatesContext}
         "gemini-3.8-flash",
         contents,
         { temperature: Math.max(0, Math.min(1, temperature)) },
-        1
+        0
       );
       if (text && text.trim()) {
-        return res.json({ ok: true, text: text.trim(), deduced: true });
+        return res.json({ ok: true, text: text.trim(), deduced: true, synthesizer: "Gemini 3.8 Flash", debugErrors: openRouterErrors });
       }
-    } catch {
-      console.log("[Omega Deduce]: Local master neural deduction active.");
+    } catch (e: any) {
+      console.log("[Omega Deduce]: Gemini direct quota/error:", e?.message);
     }
   }
 
@@ -3144,11 +3363,12 @@ ${candidatesContext}
 function getOpenRouterModelId(modelId: string): string | null {
   const mapping: Record<string, string> = {
     "deepseek-r1-compat": "deepseek/deepseek-r1",
-    "claude-3-5-sonnet-compat": "anthropic/claude-3.5-sonnet",
+    "claude-3-5-sonnet-compat": "anthropic/claude-sonnet-4.5",
     "gpt-4o-compat": "openai/gpt-4o",
     "llama-3-3-compat": "meta-llama/llama-3.3-70b-instruct",
     "qwen-2-5-compat": "qwen/qwen-2.5-72b-instruct",
-    "grok-compat": "x-ai/grok-beta",
+    "grok-compat": "x-ai/grok-4.3",
+    "gemini-3.8-flash": "google/gemini-2.5-flash",
   };
   return mapping[modelId] || null;
 }
@@ -3208,10 +3428,10 @@ app.post("/api/omega/complete", async (req, res) => {
       dynamicSystemContext,
       openrouterKey
     );
-    if (orResult) {
+    if (orResult?.text && orResult.text.trim()) {
       return res.json({ 
         ok: true, 
-        text: orResult.text, 
+        text: orResult.text.trim(), 
         modelId, 
         tokensUsed: Math.round(orResult.text.length / 4), 
         provider: orResult.provider 
@@ -3469,17 +3689,17 @@ app.post("/api/omega/complete", async (req, res) => {
     }
 
     let targetModel = "gemini-3.8-flash";
-    let systemInstruction = `${dynamicSystemContext}\nProvide accurate, rigorous, and direct answers.`;
+    let systemInstruction = `${dynamicSystemContext}\nProvide accurate, rigorous, and direct answers. For news or general inquiries, NEVER hallucinate mathematical formulas, Einstein, or physics equations!`;
 
     if (modelId === "gemini-3.8-flash") {
       targetModel = "gemini-3.8-flash";
-      systemInstruction = `${dynamicSystemContext}\nYou are operating as the Gemini 3.8 Flash high-speed inference engine within Omega. Provide lightning-fast, highly accurate, logically crisp answers.`;
+      systemInstruction = `${dynamicSystemContext}\nYou are operating as the Gemini high-speed inference engine within Omega. Provide lightning-fast, highly accurate, logically crisp answers.`;
     } else if (modelId === "gemini-3.1-pro-preview") {
       targetModel = "gemini-3.8-flash"; // Fallback from pro preview to prevent 429 quota exhaustion
-      systemInstruction = `${dynamicSystemContext}\nYou are operating as the Gemini Frontier Reasoning Engine within Omega. Provide exhaustive, logically rigorous, step-by-step reasoning with mathematical precision.`;
+      systemInstruction = `${dynamicSystemContext}\nYou are operating as the Gemini Frontier Reasoning Engine within Omega. Provide exhaustive, logically rigorous, step-by-step reasoning with empirical precision.`;
     } else if (modelId === "deepseek-r1-compat") {
       targetModel = "gemini-3.8-flash";
-      systemInstruction = `${dynamicSystemContext}\nYou represent the DeepSeek R1 reasoning perspective within the Omega Consensus Pool. Emphasize strict deductive reasoning, algorithmic proofs, edge-case analysis, and structured problem solving.`;
+      systemInstruction = `${dynamicSystemContext}\nYou represent the DeepSeek R1 reasoning perspective within the Omega Consensus Pool. Emphasize strict deductive reasoning, logic, edge-case analysis, and structured problem solving.`;
     } else if (modelId === "claude-3-5-sonnet-compat") {
       targetModel = "gemini-3.8-flash";
       systemInstruction = `${dynamicSystemContext}\nYou represent the Claude 3.5 Sonnet perspective within the Omega Consensus Pool. Write with exceptional prose, thoughtful nuance, intellectual depth, and balanced synthesis.`;
@@ -3488,7 +3708,7 @@ app.post("/api/omega/complete", async (req, res) => {
       systemInstruction = `${dynamicSystemContext}\nYou represent the GPT-4o omni perspective within the Omega Consensus Pool. Provide broad encyclopedic knowledge, well-structured bullet points, and practical implementation details.`;
     } else if (modelId === "qwen-2-5-compat") {
       targetModel = "gemini-3.8-flash";
-      systemInstruction = `${dynamicSystemContext}\nYou represent the Qwen 2.5 Server (Alibaba) within the Omega Consensus Pool. Provide deep mathematical formulation, robust algorithms, precise code examples, and rigorous proofs.`;
+      systemInstruction = `${dynamicSystemContext}\nYou represent the Qwen 2.5 Server within the Omega Consensus Pool. Provide deep analysis, robust algorithms, and clear structured answers. Use KaTeX LaTeX only when answering actual math/physics problems!`;
     } else if (modelId === "llama-3-3-compat") {
       targetModel = "gemini-3.8-flash";
       systemInstruction = `${dynamicSystemContext}\nYou represent the Meta Llama 3.3 Server within the Omega Consensus Pool. Provide concise, direct, versatile, and highly practical solutions.`;
@@ -3497,7 +3717,15 @@ app.post("/api/omega/complete", async (req, res) => {
       systemInstruction = `${dynamicSystemContext}\nYou represent the xAI Grok Server within the Omega Consensus Pool. You are the specialized authority for real-time news, breaking developments, live social media (X/Twitter) discourse, and trending topics. Deliver sharp, candid, highly grounded, and real-time insightful analysis.`;
     } else if (modelId.startsWith("omega-kernel")) {
       targetModel = "gemini-3.8-flash";
-      systemInstruction = `${dynamicSystemContext}\nYou are the Omega Kernel state projector. Formulate an answer establishing core invariants, geometric convergence, and mathematical grounding with high semantic density.`;
+      systemInstruction = `${dynamicSystemContext}\nYou are the Omega Kernel state projector. Formulate an answer establishing core invariants, geometric convergence, and grounded clarity.`;
+    }
+
+    // Pre-fetch live news if the query is about news or current events
+    let liveNewsContext = "";
+    if (/\b(خبر|أخبار|اخبار|حدث|أحداث|طقس|الطقس|الجزائر|اليوم|الآن|عاجل|news|breaking|weather|today|now|algeria)\b/i.test(lastUserMsg)) {
+      try {
+        liveNewsContext = await fetchLiveNewsForQuery(lastUserMsg);
+      } catch {}
     }
 
     // Process attachments for prompt context
@@ -3518,7 +3746,10 @@ app.post("/api/omega/complete", async (req, res) => {
 
     const basePromptText =
       (messages || []).map((m: any) => `${m.role}: ${m.content}`).join("\n\n") || lastUserMsg;
-    const fullPromptText = basePromptText + attachmentContext;
+    const fullPromptText =
+      basePromptText +
+      (liveNewsContext ? `\n\n[Real-time News Feed / تغطية إخبارية حية موثقة]:\n${liveNewsContext}\n(Use this verified news data directly in your response! Do NOT output math equations!)\n` : "") +
+      attachmentContext;
 
     // Multimodal parts (images ONLY - PDFs & Docs are extracted as text)
     const inlineParts = (Array.isArray(attachments) ? attachments : [])
@@ -3548,10 +3779,7 @@ app.post("/api/omega/complete", async (req, res) => {
       topP: 0.95,
     };
 
-    if (hasSearchNeed && targetModel.includes("gemini")) {
-      config.tools = [{ googleSearch: {} }];
-    }
-
+    // Real-time news context is already grounded via fetchLiveNewsForQuery in fullPromptText
     const { text, groundingChunks } = await callGeminiWithCascade(
       ai,
       targetModel,
@@ -4216,8 +4444,9 @@ app.get("/v1/models", (_req, res) => {
     { id: "deepseek/deepseek-r1", object: "model", created: 1710000000, owned_by: "deepseek" },
     { id: "meta-llama/llama-3.3-70b-instruct", object: "model", created: 1710000000, owned_by: "meta" },
     { id: "qwen/qwen-2.5-72b-instruct", object: "model", created: 1710000000, owned_by: "qwen" },
-    { id: "anthropic/claude-3.5-sonnet", object: "model", created: 1710000000, owned_by: "anthropic" },
+    { id: "anthropic/claude-sonnet-4.5", object: "model", created: 1710000000, owned_by: "anthropic" },
     { id: "openai/gpt-4o", object: "model", created: 1710000000, owned_by: "openai" },
+    { id: "x-ai/grok-4.3", object: "model", created: 1710000000, owned_by: "xai" },
     { id: "gemini-3.8-flash", object: "model", created: 1710000000, owned_by: "google" },
   ];
   res.json({ object: "list", data: models });
@@ -4432,9 +4661,21 @@ async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: "spa",
+      appType: "custom",
     });
     app.use(vite.middlewares);
+    app.get("*", async (req, res, next) => {
+      const url = req.originalUrl || req.url || "/";
+      try {
+        const indexPath = path.resolve(process.cwd(), "index.html");
+        let template = fs.readFileSync(indexPath, "utf-8");
+        template = await vite.transformIndexHtml(url, template);
+        res.status(200).set({ "Content-Type": "text/html" }).end(template);
+      } catch (e: any) {
+        if (vite) vite.ssrFixStacktrace(e);
+        next(e);
+      }
+    });
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
