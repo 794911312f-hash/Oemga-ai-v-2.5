@@ -24,10 +24,31 @@ import {
   Layers,
   Scale,
   ShieldAlert,
+  Compass,
+  Minimize2,
+  Network,
+  Wrench,
+  BarChart3,
 } from "lucide-react";
+import { OmegaModelRouterTab } from "./OmegaModelRouterTab";
+import { OmegaMemoryConsolidationTab } from "./OmegaMemoryConsolidationTab";
+import { OmegaKnowledgeGraphTab } from "./OmegaKnowledgeGraphTab";
+import { OmegaToolPlannerTab } from "./OmegaToolPlannerTab";
+import { OmegaAutoBenchmarkTab } from "./OmegaAutoBenchmarkTab";
+
+export type EvolutionLabTab =
+  | "overview"
+  | "router"
+  | "consolidation"
+  | "graph"
+  | "tools"
+  | "benchmark"
+  | "matrices"
+  | "selfplay"
+  | "openai";
 
 export const OmegaEvolutionLab: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<"overview" | "openai" | "selfplay" | "matrices">("overview");
+  const [activeTab, setActiveTab] = useState<EvolutionLabTab>("overview");
   const [registry, setRegistry] = useState<any | null>(null);
   const [firebaseConnected, setFirebaseConnected] = useState<boolean>(true);
   const [pulsing, setPulsing] = useState(false);
@@ -377,11 +398,11 @@ print("الجيل المتعلم:", response.omega.get("generation"))`;
         </div>
 
         {/* Tab switcher buttons */}
-        <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+        <div className="flex items-center gap-1.5 bg-slate-950/90 p-1.5 rounded-xl border border-slate-800 flex-wrap overflow-x-auto max-w-full">
           <button
             type="button"
             onClick={() => setActiveTab("overview")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === "overview"
                 ? "bg-purple-600 text-white shadow-md"
                 : "text-slate-400 hover:text-slate-200"
@@ -391,20 +412,83 @@ print("الجيل المتعلم:", response.omega.get("generation"))`;
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab("openai")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-              activeTab === "openai"
+            onClick={() => setActiveTab("router")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              activeTab === "router"
+                ? "bg-blue-600 text-white shadow-md"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Compass className="w-3.5 h-3.5 text-blue-400" />
+            راوتر النماذج الذكي
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("consolidation")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              activeTab === "consolidation"
+                ? "bg-emerald-600 text-white shadow-md"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Minimize2 className="w-3.5 h-3.5 text-emerald-400" />
+            تلخيص الذاكرة
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("graph")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              activeTab === "graph"
                 ? "bg-purple-600 text-white shadow-md"
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >
-            <Server className="w-3.5 h-3.5" />
-            خادم OpenAI API
+            <Network className="w-3.5 h-3.5 text-purple-400" />
+            رسم المعرفة الحقيقي
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("tools")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              activeTab === "tools"
+                ? "bg-amber-600 text-slate-950 shadow-md font-extrabold"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Wrench className="w-3.5 h-3.5 text-amber-400" />
+            مخطط الأدوات الذكي
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("benchmark")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              activeTab === "benchmark"
+                ? "bg-cyan-600 text-slate-950 shadow-md font-extrabold"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Award className="w-3.5 h-3.5 text-cyan-400" />
+            التقييم الآلي المستمر
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("matrices");
+              fetchMatrixState();
+            }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              activeTab === "matrices"
+                ? "bg-purple-600 text-white shadow-md"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Sliders className="w-3.5 h-3.5 text-cyan-300" />
+            مصفوفات الحالة
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("selfplay")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               activeTab === "selfplay"
                 ? "bg-purple-600 text-white shadow-md"
                 : "text-slate-400 hover:text-slate-200"
@@ -415,18 +499,15 @@ print("الجيل المتعلم:", response.omega.get("generation"))`;
           </button>
           <button
             type="button"
-            onClick={() => {
-              setActiveTab("matrices");
-              fetchMatrixState();
-            }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-              activeTab === "matrices"
+            onClick={() => setActiveTab("openai")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              activeTab === "openai"
                 ? "bg-purple-600 text-white shadow-md"
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >
-            <Sliders className="w-3.5 h-3.5 text-cyan-300" />
-            مصفوفات الاستنتاج ذو الحالة
+            <Server className="w-3.5 h-3.5" />
+            خادم OpenAI API
           </button>
         </div>
       </div>
@@ -1460,6 +1541,21 @@ print("الجيل المتعلم:", response.omega.get("generation"))`;
           </div>
         </div>
       )}
+
+      {/* TAB: INTELLIGENT MODEL ROUTER */}
+      {activeTab === "router" && <OmegaModelRouterTab />}
+
+      {/* TAB: MEMORY CONSOLIDATION */}
+      {activeTab === "consolidation" && <OmegaMemoryConsolidationTab />}
+
+      {/* TAB: REAL KNOWLEDGE GRAPH */}
+      {activeTab === "graph" && <OmegaKnowledgeGraphTab />}
+
+      {/* TAB: AUTONOMOUS TOOL PLANNER */}
+      {activeTab === "tools" && <OmegaToolPlannerTab />}
+
+      {/* TAB: CONTINUOUS AUTOMATED BENCHMARK */}
+      {activeTab === "benchmark" && <OmegaAutoBenchmarkTab />}
     </div>
   );
 };

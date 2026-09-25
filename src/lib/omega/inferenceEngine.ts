@@ -38,6 +38,11 @@ import { MCTSEngine, type MCTSResult } from "./mctsTree";
 import { HierarchicalMemoryManager } from "./hierarchicalMemory";
 import { AdversarialDebateEngine, type DebateResult } from "./adversarialDebate";
 import { SafeCodeSandbox, type ExecutionResult } from "./codeSandbox";
+import { IntelligentModelRouter } from "./intelligentRouter";
+import { MemoryConsolidator } from "./memoryConsolidation";
+import { RealKnowledgeGraph } from "./realKnowledgeGraph";
+import { ToolPlanner } from "./toolPlanner";
+import { AutoBenchmarkEngine } from "./autoBenchmark";
 
 // =============================================================================
 // Types
@@ -1135,6 +1140,11 @@ export class OmegaInferenceEngine {
   readonly hierarchicalMemory: HierarchicalMemoryManager;
   readonly debate = new AdversarialDebateEngine();
   readonly sandbox = new SafeCodeSandbox();
+  readonly router = new IntelligentModelRouter();
+  readonly consolidator = new MemoryConsolidator();
+  readonly realGraph = new RealKnowledgeGraph();
+  readonly toolPlanner = new ToolPlanner();
+  readonly autoBenchmark = new AutoBenchmarkEngine();
 
   private userId: string;
   private ltm: LongTermMemoryManager;
@@ -1231,10 +1241,24 @@ export class OmegaInferenceEngine {
     const longTermRecall = await this.ltm.recall(input.question, 4);
     const experienceContext = await this.ltm.recallExperiences(input.question, 3);
     const hierarchical = await this.hierarchicalMemory.buildHierarchicalContext(input.question);
+    const toolPlan = this.toolPlanner.plan(input.question);
+    const multiHopPaths = this.realGraph.inferMultiHop(input.question);
+    const routeDecision = this.router.route(input.question, input.domain || "general");
+
+    const graphBlock = multiHopPaths.length
+      ? `### مسارات الاستنتاج البياني (Multi-Hop Knowledge Graph):\n` +
+        multiHopPaths.map((p) => `• ${p.explanation} (ثقة: ${p.confidence})`).join("\n")
+      : "";
+
+    const planBlock = `### خطة الأدوات الذكية (Tool Execution Plan):\n• الأداة الأساسية: ${toolPlan.primaryTool} (${toolPlan.executionMode}) - ${toolPlan.rationale}`;
+    const routerBlock = `### التوجيه الذكي بالأداء الفعلي (Empirical Router):\n• النموذج المقترح: ${routeDecision.selectedModel} (${(routeDecision.confidenceScore * 100).toFixed(1)}%) - ${routeDecision.reasoning}`;
 
     const contextBlock = [
       pre.contextBlock,
       hierarchical.formattedBlock,
+      graphBlock,
+      planBlock,
+      routerBlock,
       longTermRecall.length ? `### ذاكرة طويلة الأمد\n${longTermRecall.join("\n")}` : "",
       experienceContext ? `### تجارب Firestore\n${experienceContext}` : "",
     ]
@@ -1267,6 +1291,16 @@ export class OmegaInferenceEngine {
       modelWeights
     );
     this.generation = state.generation;
+
+    // Update empirical performance router ledger
+    if (input.chosenModelId) {
+      this.router.recordOutcome(
+        input.chosenModelId,
+        input.domain || "general",
+        !!input.verificationPassed,
+        input.topPsi ?? 0.85
+      );
+    }
 
     // ذاكرة طويلة الأمد عند ثقة عالية
     const psi = input.topPsi ?? 0.7;
