@@ -1017,7 +1017,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
       });
 
       // Update Omega kernel, lineage, and real Firestore self-evolution
-      globalOmegaKernel.absorb(userMsgContent, result.candidates);
+      globalOmegaKernel.absorb(userMsgContent, result.candidates, result.domain);
       globalOmegaLineage.recordStep(userMsgContent, result);
 
       try {
@@ -2287,6 +2287,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
       {/* 3D Animated Professor Omega Avatar */}
       {showProfessor3D && (
         <OmegaProfessor3D
+          currentContext={currentStep}
+          isProcessing={isProcessing}
           isFloating={isProfessorFloating}
           onCloseFloating={() => setShowProfessor3D(false)}
           onSendMessage={(txt) => {

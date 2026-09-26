@@ -1,12 +1,22 @@
 /**
  * src/lib/omega/kernel.ts
  * Omega Kernel Architecture:
- * State vector mechanics, spectral consensus, and continuous kernel state evolution.
+ * State vector mechanics, spectral consensus, real-time pub/sub telemetry,
+ * and continuous kernel state evolution synchronized with the 3D Avatar.
  */
 
-import { dot, norm, normalize, entropy } from "./math";
+import { norm, normalize, entropy } from "./math";
 import { hashEmbed } from "./embeddings";
 import type { FusionCandidate } from "./fusion";
+
+export type AvatarMoodState =
+  | "neutral"
+  | "speaking"
+  | "eureka"
+  | "thinking"
+  | "adjust_glasses"
+  | "scratch_beard"
+  | "pointing";
 
 export interface KernelState {
   step: number;
@@ -20,10 +30,17 @@ export interface KernelState {
   activeDimensions: number;
   lastUpdated: number;
   recentProjections: { label: string; x: number; y: number; psi: number }[];
+  avatarMood?: AvatarMoodState;
+  lastDomain?: string;
+  thinkingDepth?: number;
+  lastInsight?: string;
 }
+
+type KernelListener = (state: KernelState) => void;
 
 export class OmegaKernel {
   private state: KernelState;
+  private listeners: Set<KernelListener> = new Set();
 
   constructor(dim = 32) {
     const initialVec = normalize(
@@ -41,6 +58,10 @@ export class OmegaKernel {
       activeDimensions: Math.round(dim * 0.75),
       lastUpdated: Date.now(),
       recentProjections: [],
+      avatarMood: "neutral",
+      lastDomain: "general",
+      thinkingDepth: 2,
+      lastInsight: "النواة الكمومية في حالة اتزان طيفي وجاهزية للاستدلال.",
     };
   }
 
@@ -49,9 +70,53 @@ export class OmegaKernel {
   }
 
   /**
+   * Subscribe to real-time kernel state updates (used by OmegaProfessor3D & HUDs).
+   */
+  public subscribe(listener: KernelListener): () => void {
+    this.listeners.add(listener);
+    listener(this.getState());
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private emit(): void {
+    const snapshot = this.getState();
+    this.listeners.forEach((fn) => {
+      try {
+        fn(snapshot);
+      } catch (e) {
+        console.warn("[OmegaKernel] Listener error:", e);
+      }
+    });
+  }
+
+  /**
+   * Updates the 3D Avatar mood and optional live insight banner, notifying subscribers.
+   */
+  public setAvatarMood(
+    mood: AvatarMoodState,
+    insight?: string,
+    domain?: string,
+    thinkingDepth?: number
+  ): KernelState {
+    this.state.avatarMood = mood;
+    if (insight !== undefined) this.state.lastInsight = insight;
+    if (domain !== undefined) this.state.lastDomain = domain;
+    if (thinkingDepth !== undefined) this.state.thinkingDepth = thinkingDepth;
+    this.state.lastUpdated = Date.now();
+    this.emit();
+    return this.getState();
+  }
+
+  /**
    * Absorb input stimulus and candidate consensus vectors, evolving the kernel state.
    */
-  public absorb(input: string, candidates: FusionCandidate[] = []): KernelState {
+  public absorb(
+    input: string,
+    candidates: FusionCandidate[] = [],
+    domain?: string
+  ): KernelState {
     const inputVec = hashEmbed(input, this.state.dim);
     this.state.step += 1;
 
@@ -104,6 +169,8 @@ export class OmegaKernel {
     this.state.spectralRadius = Number(
       (0.85 + 0.14 * this.state.coherence).toFixed(4)
     );
+    if (domain) this.state.lastDomain = domain;
+    this.state.avatarMood = this.state.coherence >= 0.88 ? "eureka" : "pointing";
     this.state.lastUpdated = Date.now();
 
     // 2D projections for visualizer
@@ -120,6 +187,7 @@ export class OmegaKernel {
       });
     }
 
+    this.emit();
     return this.getState();
   }
 
@@ -139,7 +207,12 @@ export class OmegaKernel {
       activeDimensions: Math.round(dim * 0.75),
       lastUpdated: Date.now(),
       recentProjections: [],
+      avatarMood: "neutral",
+      lastDomain: "general",
+      thinkingDepth: 2,
+      lastInsight: "تمت إعادة ضبط متجه الحالة الكمومي للنواة.",
     };
+    this.emit();
   }
 }
 

@@ -45,7 +45,10 @@ import {
 } from "./src/lib/omega/inferenceEngine";
 
 // Global process exception handlers to prevent container restart/crashes
-process.on("uncaughtException", (err) => {
+process.on("uncaughtException", (err: any) => {
+  if (err?.code === "EADDRINUSE") {
+    process.exit(0);
+  }
   console.error("[Omega Server] Uncaught exception safely handled:", err);
 });
 
@@ -56,7 +59,7 @@ process.on("unhandledRejection", (reason) => {
 const app = express();
 app.set("trust proxy", 1);
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const PORT = 3000;
 
 import rateLimit from "express-rate-limit";
 
@@ -1254,16 +1257,15 @@ async function callOpenAICompatibleApi(
   let effectiveMessages = messages;
 
   if (isOpenRouter) {
-    // If systemInstruction is oversized (e.g. 5,000+ chars from dynamic context),
-    // condense it so OpenRouter prompt tokens remain well within the account limit.
-    if (!effectiveSystem || effectiveSystem.length > 300) {
-      effectiveSystem = "أنت خادم ذكاء اصطناعي فائق ضمن منظومة أوميغا (Omega AI) المطورة حصرياً من المهندس faid Massinissa. أجب بدقة وعلمية واقتدار. استخدم KaTeX للمعادلات الرياضية والعلمية. المطور هو faid Massinissa.";
+    // Keep the full system instruction if it fits within reasonable limits (e.g., 8000 chars)
+    if (!effectiveSystem || effectiveSystem.length > 8000) {
+      effectiveSystem = "أنت خادم ذكاء اصطناعي فائق فلسفي رصين ضمن منظومة أوميغا (Omega AI) المطورة حصرياً من المهندس faid Massinissa. أجب بدقة وعلمية واقتدار وفلسفة وتفصيل. استخدم KaTeX للمعادلات الرياضية والعلمية. المطور هو faid Massinissa.";
     }
 
-    // Keep the most recent messages, compacting long text
-    effectiveMessages = (messages || []).slice(-4).map((m) => ({
+    // Keep more conversational history (last 15 messages) and longer text (up to 4000 chars)
+    effectiveMessages = (messages || []).slice(-15).map((m) => ({
       role: m.role === "assistant" ? "assistant" : "user",
-      content: typeof m.content === "string" ? m.content.slice(0, 700) : String(m.content || ""),
+      content: typeof m.content === "string" ? m.content.slice(0, 4000) : String(m.content || ""),
     }));
   }
 
@@ -1275,8 +1277,8 @@ async function callOpenAICompatibleApi(
     })),
   ];
 
-  // OpenRouter credit-safe max_tokens: cap at 300 so requests fit remaining balance without 402
-  let targetTokens = isOpenRouter ? Math.min(Math.max(80, maxTokens || 250), 300) : maxTokens;
+  // OpenRouter max_tokens: Allow up to 3000 tokens for long, deeply detailed and philosophical answers
+  let targetTokens = isOpenRouter ? Math.min(Math.max(80, maxTokens || 2048), 3000) : maxTokens;
 
   const makeCall = async (tokensToRequest: number) => {
     return fetch(endpoint, {
@@ -3062,11 +3064,13 @@ app.get("/api/omega/voice/catalog", (_req, res) => {
       { id: "celebrities", nameAr: "أصوات المشاهير والرواد (مورغان فريمان، أتينبورو، ستيف جوبز...)" },
       { id: "documentary", nameAr: "أصوات الأفلام الوثائقية والرواة (ناشيونال جيوغرافيك، الرواية السينمائية...)" },
     ],
+    providersStatus: voiceManager.getProvidersStatus(),
+    personas: voiceManager.getCatalog(),
   });
 });
 
 app.post("/api/omega/voice/synthesize", async (req, res) => {
-  const { text, personaId = "doc-arabic-fusha", engineId = "elevenlabs", speed = 1.0 } = req.body || {};
+  const { text, personaId = "doc-arabic-fusha", engineId, category, speed = 1.0 } = req.body || {};
   if (!text || typeof text !== "string") {
     return res.status(400).json({ ok: false, error: "Missing text parameter" });
   }
@@ -3084,17 +3088,41 @@ app.post("/api/omega/voice/synthesize", async (req, res) => {
   const wordsCount = cleanedText.split(/\s+/).filter(Boolean).length;
   const estimatedSeconds = Math.max(2, Math.round((wordsCount / (130 * speed)) * 60));
 
+  let audioBase64: string | undefined;
+  let mimeType: string | undefined;
+  let providerUsed = engineId || "gemini-tts";
+  let detectedCategory = category || voiceManager.detectCategory(cleanedText);
+
+  try {
+    const synthResult = await voiceManager.synthesize({
+      text: cleanedText,
+      personaId,
+      provider: engineId as any,
+      category: detectedCategory as any,
+      speed,
+    });
+    audioBase64 = synthResult.audioBuffer.toString("base64");
+    mimeType = synthResult.mimeType;
+    providerUsed = synthResult.providerUsed;
+    detectedCategory = synthResult.category;
+  } catch (err: any) {
+    // Graceful fallback when external provider keys are not configured
+  }
+
   return res.json({
     ok: true,
     speechData: {
       text: cleanedText,
       personaId,
-      engineId,
+      engineId: providerUsed,
+      category: detectedCategory,
       speed,
       wordsCount,
       estimatedDurationSeconds: estimatedSeconds,
+      audioBase64,
+      mimeType,
       timestamp: Date.now(),
-      status: "synthesized",
+      status: audioBase64 ? "neural_audio_ready" : "synthesized",
     },
   });
 });
@@ -3400,12 +3428,13 @@ ${candidatesContext}
 2. الخوادم لا تتصارع ولا تحارب بعضها البعض، بل هي أدواتك التخصصية التناغمية. ادمج بين دقة الخوارزميات (Qwen)، عمق الاستدلال (DeepSeek)، والشمولية المعرفية (GPT-4o) لتكوين رؤية فلسفية ومعرفية متكاملة.
 3. استنتاج الحقيقة الصائبة يتطلب التفكيك النقدي؛ لا تكتفِ بسرد المعلومات، بل ابحث عن الأبعاد الكامنة، الجدلية، والآثار المترتبة على موضوع السؤال.
 4. إذا كان الموضوع فلسفياً أو إنسانياً، قم بإثراء الإجابة بالربط بين المدارس الفكرية المختلفة، التحليل التاريخي، والتأمل الأنطولوجي.
-5. التنسيق العلمي والرياضي وحظر المعادلات في الأدب (كما هو محدد سابقاً).`;
-5. الهوية والمنشئ: تحدث باسم "نظام أوميغا للذكاء الاصطناعي (Omega AI)". وإذا سأل المستخدم عمن قام بإنشائك أو برمجتك، فالجواب القطعي الدائم هو: faid Massinissa.${
+5. التنسيق العلمي والرياضي وحظر المعادلات في الأدب (كما هو محدد سابقاً).
+6. الهوية والمنشئ: تحدث باسم "نظام أوميغا للذكاء الاصطناعي (Omega AI)". وإذا سأل المستخدم عمن قام بإنشائك أو برمجتك، فالجواب القطعي الدائم هو: faid Massinissa.
+${
     /كولاتز|كولاطز|collatz|3n\+1|3x\+1|ريمان|riemann|فرضية ريمان|دالة زيتا|غولدباخ|goldbach|p vs np|p مقابل np|التوأم الأولي|twin prime|نافييه ستوكس|navier-stokes|يانغ ميلز|yang-mills|بيرتش وسوينرتون|هودج|hodge|مسألة مفتوحة|مسأله مفتوحه|open problem|unsolved problem|unsolved mathematical|حدسية غير محلولة|معضلة غير محلولة|فرضية غير مبرهنة|حلل بعمق|استكشاف استدلالي|اقترح نظرية|اقترح فرضية|توليد فرضيات|تفنيد ذاتي|deep exploration|tree of thought|propose a theory|propose hypothesis|self-falsification|exploratory reasoning/i.test(
       question
     )
-      ? `\n6. بروتوكول الاستدلال الاستكشافي وتوليد الفرضيات (Deep Exploration & Hypothesis Engine):
+      ? `\n7. بروتوكول الاستدلال الاستكشافي وتوليد الفرضيات (Deep Exploration & Hypothesis Engine):
    - السؤال ينتمي إلى المسائل العلمية/الرياضية المفتوحة أو يتطلب استكشافاً نظرياً عميقاً:
    - ابدأ بـ «الصياغة البنيوية الدقيقة للمسألة» بالرموز والمعادلات الرياضية KaTeX ($...$ و $$...$$).
    - استعرض «الحدود المثبتة حتى الآن وما هو مفتوح» علمياً (State of the Art Bounds).
@@ -3456,7 +3485,7 @@ ${candidatesContext}
             synthModel,
             deduceMsg,
             temperature,
-            350,
+            2048,
             synthSystemInstruction,
             openrouterKey
           );
@@ -4891,14 +4920,22 @@ app.post("/api/omega/router/feedback", (req, res) => {
 
 app.post("/api/omega/voice/generate", async (req, res) => {
   try {
-    const { text, category } = req.body;
-    if (!text || !category) {
-      return res.status(400).json({ ok: false, error: "Text and category are required." });
+    const { text, category, personaId, provider, speed } = req.body || {};
+    if (!text) {
+      return res.status(400).json({ ok: false, error: "Text is required." });
     }
-    
-    const audioBuffer = await voiceManager.generateVoice(text, category);
-    res.set("Content-Type", "audio/mpeg");
-    res.send(audioBuffer);
+
+    const result = await voiceManager.synthesize({
+      text,
+      category,
+      personaId,
+      provider,
+      speed,
+    });
+    res.set("Content-Type", result.mimeType);
+    res.set("X-Omega-Voice-Provider", result.providerUsed);
+    res.set("X-Omega-Voice-Persona", result.personaId);
+    res.send(result.audioBuffer);
   } catch (err: any) {
     res.status(500).json({ ok: false, error: err?.message });
   }
@@ -5346,7 +5383,11 @@ async function startServer() {
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: false,
+        watch: null,
+      },
       appType: "custom",
     });
     app.use(vite.middlewares);
@@ -5370,8 +5411,14 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const httpServer = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Omega AI server running at http://0.0.0.0:${PORT}`);
+  });
+
+  httpServer.on("error", (err: any) => {
+    if (err?.code === "EADDRINUSE") {
+      process.exit(0);
+    }
   });
 }
 

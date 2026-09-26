@@ -141,7 +141,7 @@ export const OmegaMediaModal: React.FC<OmegaMediaModalProps> = ({
 }) => {
   const [mediaType, setMediaType] = useState<"pipeline" | "voice" | "video" | "image">("pipeline");
   const [selectedScientistId, setSelectedScientistId] = useState<string>("newton");
-  const [pipelineMode, setPipelineMode] = useState<"flagship" | "open_source">("flagship");
+  const [pipelineMode, setPipelineMode] = useState<"flagship" | "open_source">("open_source");
   const [selectedVoiceCategory, setSelectedVoiceCategory] = useState<VoiceCategory>("scientists");
   const [selectedPersonaId, setSelectedPersonaId] = useState<string>("newton");
   const [selectedVoiceEngineId, setSelectedVoiceEngineId] = useState<string>("elevenlabs");
@@ -151,7 +151,7 @@ export const OmegaMediaModal: React.FC<OmegaMediaModalProps> = ({
   );
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [style, setStyle] = useState("cinematic");
-  const [selectedVideoModel, setSelectedVideoModel] = useState<VideoModelId>("veo-google");
+  const [selectedVideoModel, setSelectedVideoModel] = useState<VideoModelId>("wan-2-2-alibaba");
   const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
