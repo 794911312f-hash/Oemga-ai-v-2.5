@@ -19,6 +19,7 @@ import {
   AlertCircle,
   Radio,
   Headphones,
+  Download,
 } from "lucide-react";
 import { AudioFrequencyVisualizer } from "./AudioFrequencyVisualizer";
 import { useVoiceInteraction } from "../../lib/omega/useVoiceInteraction";
@@ -28,6 +29,10 @@ import {
   stopSpeaking,
   type VoicePersona,
 } from "../../lib/omega/speech";
+import {
+  synthesizeSpeechToWavBlob,
+  triggerAudioFileDownload,
+} from "../../lib/omega/audioExporter";
 
 interface LiveVoiceInteractionModalProps {
   isOpen: boolean;
@@ -317,24 +322,48 @@ export const LiveVoiceInteractionModal: React.FC<LiveVoiceInteractionModalProps>
 
         {/* Modal Action Controls */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800">
-          {/* Continuous Duplex / Auto-send Toggle */}
-          <button
-            type="button"
-            onClick={() => setAutoSendOnSilence((prev) => !prev)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
-              autoSendOnSilence
-                ? "bg-emerald-950 border-emerald-400 text-emerald-300 ring-1 ring-emerald-400/30"
-                : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-300"
-            }`}
-            title="الإرسال التلقائي بمجرد التوقف عن الكلام (حوار مستمر)"
-          >
-            <span
-              className={`w-2 h-2 rounded-full ${
-                autoSendOnSilence ? "bg-emerald-400 animate-ping" : "bg-slate-600"
+          <div className="flex items-center gap-2">
+            {/* Continuous Duplex / Auto-send Toggle */}
+            <button
+              type="button"
+              onClick={() => setAutoSendOnSilence((prev) => !prev)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                autoSendOnSilence
+                  ? "bg-emerald-950 border-emerald-400 text-emerald-300 ring-1 ring-emerald-400/30"
+                  : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-300"
               }`}
-            />
-            <span>حوار مستمر تلقائي</span>
-          </button>
+              title="الإرسال التلقائي بمجرد التوقف عن الكلام (حوار مستمر)"
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  autoSendOnSilence ? "bg-emerald-400 animate-ping" : "bg-slate-600"
+                }`}
+              />
+              <span>حوار مستمر تلقائي</span>
+            </button>
+
+            {/* Export Audio File Button */}
+            <button
+              type="button"
+              onClick={async () => {
+                const text = lastAnswer || currentSpeechText || currentPersona.sampleQuoteAr;
+                try {
+                  const { blob, filename } = await synthesizeSpeechToWavBlob(text, {
+                    personaId: selectedPersonaId,
+                    speed: 1.0,
+                  });
+                  triggerAudioFileDownload(blob, filename);
+                } catch (e) {
+                  console.error("Audio export error:", e);
+                }
+              }}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-purple-950/70 border border-purple-500/40 hover:bg-purple-900 text-purple-200 text-xs font-medium transition-all cursor-pointer"
+              title="تصدير وتحميل الرد كملف صوتي (WAV)"
+            >
+              <Download className="w-3.5 h-3.5 text-purple-400" />
+              <span>تحميل ملف الصوت</span>
+            </button>
+          </div>
 
           {/* Center Mic Toggle & Direct Send */}
           <div className="flex items-center gap-2">

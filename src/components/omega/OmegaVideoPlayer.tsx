@@ -22,6 +22,12 @@ import {
   Radio,
   Globe,
   Headphones,
+  FileVideo,
+  Upload,
+  StepForward,
+  StepBack,
+  Tv,
+  Loader2,
 } from "lucide-react";
 import { OMEGA_VIDEO_MODELS, type VideoModelId } from "../../lib/omega/models";
 import {
@@ -1076,6 +1082,128 @@ export const OmegaVideoPlayer: React.FC<OmegaVideoPlayerProps> = ({
     link.click();
   };
 
+  const [isExportingVideo, setIsExportingVideo] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
+  const [customVideoUrl, setCustomVideoUrl] = useState<string | null>(rawData.videoUrl || null);
+  const videoElementRef = useRef<HTMLVideoElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleStepForward = () => {
+    stopSpeaking();
+    setIsSpeakingVoice(false);
+    lastSpokenSceneRef.current = -1;
+    timeRef.current = Math.min(durationSec, timeRef.current + 1 / 30);
+    setProgress(timeRef.current / durationSec);
+  };
+
+  const handleStepBackward = () => {
+    stopSpeaking();
+    setIsSpeakingVoice(false);
+    lastSpokenSceneRef.current = -1;
+    timeRef.current = Math.max(0, timeRef.current - 1 / 30);
+    setProgress(timeRef.current / durationSec);
+  };
+
+  const handleTogglePiP = async () => {
+    try {
+      if (videoElementRef.current && document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else if (videoElementRef.current) {
+        await videoElementRef.current.requestPictureInPicture();
+      } else if (containerRef.current) {
+        handleFullscreen();
+      }
+    } catch (e) {
+      console.warn("PiP toggle warning:", e);
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setCustomVideoUrl(url);
+      setIsPlaying(true);
+    }
+  };
+
+  const handleExportVideoFile = async () => {
+    const canvas = canvasRef.current;
+    if (!canvas || isExportingVideo) return;
+
+    try {
+      setIsExportingVideo(true);
+      setExportProgress(10);
+
+      // Check stream support
+      const stream = canvas.captureStream ? canvas.captureStream(30) : null;
+      if (!stream || typeof MediaRecorder === "undefined") {
+        // Fallback: download high-res snapshot
+        handleDownloadSnapshot();
+        setIsExportingVideo(false);
+        return;
+      }
+
+      const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+        ? "video/webm;codecs=vp9"
+        : MediaRecorder.isTypeSupported("video/webm")
+        ? "video/webm"
+        : "video/mp4";
+
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType,
+        videoBitsPerSecond: 6000000,
+      });
+
+      const chunks: Blob[] = [];
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunks, { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        const ext = mimeType.includes("mp4") ? "mp4" : "webm";
+        link.download = `omega_video_${activeModelId}_${Date.now()}.${ext}`;
+        link.href = url;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        setIsExportingVideo(false);
+        setExportProgress(100);
+      };
+
+      // Restart playback from beginning for clean recording
+      timeRef.current = 0;
+      setProgress(0);
+      setIsPlaying(true);
+      mediaRecorder.start(100);
+
+      const recordDurationMs = Math.min(durationSec * 1000, 15000);
+      const intervalMs = 200;
+      let elapsed = 0;
+
+      const progressTimer = setInterval(() => {
+        elapsed += intervalMs;
+        const p = Math.min(95, Math.floor((elapsed / recordDurationMs) * 100));
+        setExportProgress(p);
+
+        if (elapsed >= recordDurationMs) {
+          clearInterval(progressTimer);
+          if (mediaRecorder.state !== "inactive") {
+            mediaRecorder.stop();
+          }
+        }
+      }, intervalMs);
+    } catch (exportErr) {
+      console.error("Video export error:", exportErr);
+      setIsExportingVideo(false);
+      handleDownloadSnapshot();
+    }
+  };
+
   const currentSecondsFormatted = Math.floor(progress * durationSec);
   const videoModelEntries = Object.values(OMEGA_VIDEO_MODELS);
 
@@ -1159,23 +1287,69 @@ export const OmegaVideoPlayer: React.FC<OmegaVideoPlayerProps> = ({
           )}
         </div>
 
-        {/* Right: Resolution & FPS & Engine Status */}
-        <div className="flex items-center gap-2 text-[10px] font-mono text-slate-400">
-          <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800">
-            {activeModelSpec.resolution}
-          </span>
-          <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-emerald-400">
-            {activeModelSpec.fps} FPS
-          </span>
-          <span className="text-purple-300 hidden sm:inline">
-            Physics: {activeModelSpec.physicsRating}
+        {/* Right: Model Badge & Video File Upload */}
+        <div className="flex items-center gap-2">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            accept="video/*"
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-[11px] transition-all cursor-pointer shadow-sm"
+            title="تشغيل أو اختبار ملف فيديو محلي"
+          >
+            <Upload className="w-3.5 h-3.5 text-cyan-400" />
+            <span>ملف فيديو</span>
+          </button>
+
+          <span className="text-xs text-slate-400 font-mono flex items-center gap-1 bg-slate-950/80 px-2.5 py-1 rounded-lg border border-slate-800">
+            <Cpu className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="text-slate-300">{activeModelSpec.badge}</span>
           </span>
         </div>
       </div>
 
-      {/* Video Canvas Container */}
+      {/* Video Canvas / Native Video Container */}
       <div className="relative w-full aspect-video bg-black overflow-hidden flex items-center justify-center">
-        <canvas ref={canvasRef} className="w-full h-full object-cover block" />
+        {customVideoUrl ? (
+          <video
+            ref={videoElementRef}
+            src={customVideoUrl}
+            controls={false}
+            autoPlay={isPlaying}
+            loop
+            className="w-full h-full object-contain"
+            onTimeUpdate={() => {
+              if (videoElementRef.current) {
+                const cur = videoElementRef.current.currentTime;
+                const dur = videoElementRef.current.duration || durationSec;
+                timeRef.current = cur;
+                setProgress(dur > 0 ? cur / dur : 0);
+              }
+            }}
+          />
+        ) : (
+          <canvas ref={canvasRef} className="w-full h-full object-cover block" />
+        )}
+
+        {/* Video Export Progress Overlay */}
+        {isExportingVideo && (
+          <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center gap-3 z-30 animate-fade-in text-center p-4">
+            <Loader2 className="w-10 h-10 text-cyan-400 animate-spin" />
+            <div className="text-sm font-bold text-white">جاري تصدير وتسجيل ملف الفيديو بدقة عالية...</div>
+            <div className="w-64 h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+              <div
+                className="h-full bg-gradient-to-r from-cyan-400 to-purple-500 transition-all duration-200"
+                style={{ width: `${exportProgress}%` }}
+              />
+            </div>
+            <span className="text-xs text-slate-400 font-mono">{exportProgress}% مكتمل</span>
+          </div>
+        )}
 
         {/* Video Prompt Overlay Badge */}
         <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none">
@@ -1265,8 +1439,8 @@ export const OmegaVideoPlayer: React.FC<OmegaVideoPlayerProps> = ({
 
       {/* Video Player Controls Bar */}
       <div className="flex flex-wrap items-center justify-between px-4 py-2.5 bg-slate-950 border-t border-slate-900 gap-2 text-xs">
-        {/* Left: Play, Reset, Audio, Time */}
-        <div className="flex items-center gap-2">
+        {/* Left: Play, Reset, Step Back/Forward, Audio, Time */}
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={handleTogglePlay}
@@ -1283,6 +1457,24 @@ export const OmegaVideoPlayer: React.FC<OmegaVideoPlayerProps> = ({
             title="إعادة من البداية"
           >
             <RotateCcw className="w-4 h-4" />
+          </button>
+
+          <button
+            type="button"
+            onClick={handleStepBackward}
+            className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-cyan-300 transition-colors cursor-pointer"
+            title="إطار للخلف (Frame Step Back)"
+          >
+            <StepBack className="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            type="button"
+            onClick={handleStepForward}
+            className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-cyan-300 transition-colors cursor-pointer"
+            title="إطار للأمام (Frame Step Forward)"
+          >
+            <StepForward className="w-3.5 h-3.5" />
           </button>
 
           {/* Synchronized Audio Narration Toggle */}
@@ -1525,7 +1717,7 @@ export const OmegaVideoPlayer: React.FC<OmegaVideoPlayerProps> = ({
           )}
         </div>
 
-        {/* Right: Subtitles, Speed, Snapshot, Fullscreen */}
+        {/* Right: Subtitles, Speed, Video Export, Snapshot, PiP, Fullscreen */}
         <div className="flex items-center gap-1.5">
           <button
             type="button"
@@ -1553,14 +1745,35 @@ export const OmegaVideoPlayer: React.FC<OmegaVideoPlayerProps> = ({
             {playbackRate}x
           </button>
 
+          {/* Export Full Video File */}
+          <button
+            type="button"
+            onClick={handleExportVideoFile}
+            disabled={isExportingVideo}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gradient-to-r from-purple-900/90 to-cyan-900/90 hover:from-purple-800 hover:to-cyan-800 border border-cyan-500/40 text-cyan-200 hover:text-white transition-all cursor-pointer shadow-sm disabled:opacity-50"
+            title="تصدير وتحميل كملف فيديو MP4 / WebM"
+          >
+            <FileVideo className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="text-[11px] font-bold">تصدير فيديو</span>
+          </button>
+
           <button
             type="button"
             onClick={handleDownloadSnapshot}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer"
-            title="تحميل لقطة من المشهد"
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer"
+            title="تحميل لقطة من المشهد (PNG)"
           >
             <Download className="w-3.5 h-3.5" />
-            <span className="text-[11px]">حفظ</span>
+            <span className="text-[11px]">لقطة</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleTogglePiP}
+            className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-cyan-300 transition-colors cursor-pointer"
+            title="صورة داخل صورة (Picture-in-Picture)"
+          >
+            <Tv className="w-3.5 h-3.5" />
           </button>
 
           <button

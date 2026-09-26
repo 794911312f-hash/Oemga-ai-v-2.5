@@ -21,6 +21,7 @@ import {
   Pause,
   Square,
   Radio,
+  Download,
 } from "lucide-react";
 import {
   OMEGA_VIDEO_MODELS,
@@ -37,6 +38,10 @@ import {
   stopSpeaking,
   subscribeSpeechState,
 } from "../../lib/omega/speech";
+import {
+  synthesizeSpeechToWavBlob,
+  triggerAudioFileDownload,
+} from "../../lib/omega/audioExporter";
 
 export interface OmegaMediaModalProps {
   isOpen: boolean;
@@ -530,8 +535,8 @@ export const OmegaMediaModal: React.FC<OmegaMediaModalProps> = ({
                 </div>
               </div>
 
-              {/* Instant Audio Preview / Live Test Bar */}
-              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between gap-3">
+              {/* Instant Audio Preview & Direct Audio File Download */}
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">
                   <div
                     className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0"
@@ -541,7 +546,7 @@ export const OmegaMediaModal: React.FC<OmegaMediaModalProps> = ({
                   </div>
                   <div className="min-w-0">
                     <div className="text-xs font-bold text-slate-200 truncate">
-                      معاينة صوت: {selectedPersona.nameAr}
+                      صوت: {selectedPersona.nameAr}
                     </div>
                     <div className="text-[10px] text-slate-400">
                       محرك: {selectedVoiceEngine.name} • نبرة: {selectedPersona.pitch}x
@@ -564,27 +569,52 @@ export const OmegaMediaModal: React.FC<OmegaMediaModalProps> = ({
                   ))}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleToggleVoicePreview}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    isVoiceTesting
-                      ? "bg-red-600 hover:bg-red-500 text-white"
-                      : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-900/30"
-                  }`}
-                >
-                  {isVoiceTesting ? (
-                    <>
-                      <Square className="w-3.5 h-3.5" />
-                      <span>إيقاف الصوت</span>
-                    </>
-                  ) : (
-                    <>
-                      <Volume2 className="w-3.5 h-3.5" />
-                      <span>استمع الآن</span>
-                    </>
-                  )}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const { blob, filename } = await synthesizeSpeechToWavBlob(
+                          prompt || selectedPersona.sampleQuoteAr,
+                          {
+                            personaId: selectedPersona.id,
+                            speed: 1.0,
+                          }
+                        );
+                        triggerAudioFileDownload(blob, filename);
+                      } catch (err) {
+                        console.error("[Download voice error]:", err);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-purple-950/90 hover:bg-purple-900 text-purple-200 border border-purple-500/40 shadow-sm transition-all cursor-pointer"
+                    title="تحميل ملف صوتي حقيقي (WAV)"
+                  >
+                    <Download className="w-3.5 h-3.5 text-purple-400" />
+                    <span>تحميل ملف الصوت (WAV)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleToggleVoicePreview}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      isVoiceTesting
+                        ? "bg-red-600 hover:bg-red-500 text-white"
+                        : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-900/30"
+                    }`}
+                  >
+                    {isVoiceTesting ? (
+                      <>
+                        <Square className="w-3.5 h-3.5" />
+                        <span>إيقاف الصوت</span>
+                      </>
+                    ) : (
+                      <>
+                        <Volume2 className="w-3.5 h-3.5" />
+                        <span>استمع الآن</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           )}

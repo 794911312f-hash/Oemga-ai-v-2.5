@@ -73,6 +73,10 @@ import {
   type VoicePersona,
   type VoiceCategory,
 } from "../../lib/omega/speech";
+import {
+  synthesizeSpeechToWavBlob,
+  triggerAudioFileDownload,
+} from "../../lib/omega/audioExporter";
 
 class SafeBoundary extends React.Component<
   { children: React.ReactNode; fallback?: React.ReactNode },
@@ -116,6 +120,7 @@ import {
 } from "./TreeOfThoughtVisualizer";
 import { OmegaNotebookModal } from "./OmegaNotebookModal";
 import { OmegaCodeSandbox } from "./OmegaCodeSandbox";
+import { ComplexOperationsLab } from "./ComplexOperationsLab";
 import {
   loadSessions,
   createSession,
@@ -311,6 +316,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [showNotebookModal, setShowNotebookModal] = useState<boolean>(false);
   const [showCodeSandbox, setShowCodeSandbox] = useState<boolean>(false);
   const [showLiveVoiceModal, setShowLiveVoiceModal] = useState<boolean>(false);
+  const [showComplexLabModal, setShowComplexLabModal] = useState<boolean>(false);
 
   // Direct Voice Interaction with Audio Frequency Analysis
   const chatVoice = useVoiceInteraction({
@@ -1734,6 +1740,27 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       )}
                     </button>
 
+                    {/* Download Audio File (WAV) */}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const { blob, filename } = await synthesizeSpeechToWavBlob(msg.content, {
+                            personaId: selectedPersonaId,
+                            speed: speedMultiplier,
+                          });
+                          triggerAudioFileDownload(blob, filename);
+                        } catch (err) {
+                          console.error("[Download Message Audio Error]:", err);
+                        }
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer border shadow-sm bg-purple-950/70 border-purple-500/40 text-purple-300 hover:text-white hover:bg-purple-900"
+                      title="تحميل نطق هذه الإجابة كملف صوتي حقيقي (WAV)"
+                    >
+                      <Download className="w-3.5 h-3.5 text-purple-400" />
+                      <span>تحميل ملف الصوت (WAV)</span>
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => copyToClipboard(msg.content, msg.id)}
@@ -2011,6 +2038,17 @@ export const ChatView: React.FC<ChatViewProps> = ({
       {/* QUICK CAPABILITY TOOLBAR */}
       <div className="flex items-center gap-1.5 py-1.5 overflow-x-auto border-t border-slate-800/60 text-xs">
         <span className="text-[11px] text-slate-500 shrink-0 font-medium ml-1">أدوات أوميغا:</span>
+
+        {/* Complex Operations Lab Trigger */}
+        <button
+          type="button"
+          onClick={() => setShowComplexLabModal(true)}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-950/80 hover:bg-purple-900 border border-purple-500/50 text-purple-200 hover:text-white transition-colors shrink-0 cursor-pointer shadow-sm"
+          title="مختبر العمليات المعقدة: مصفوفات، كولاتز، نسبية، وميكانيكا الكم"
+        >
+          <Sigma className="w-3.5 h-3.5 text-purple-400" />
+          <span>العمليات المعقدة</span>
+        </button>
 
         {/* Real-time Voice Interaction Room Trigger */}
         <button
@@ -2350,6 +2388,18 @@ export const ChatView: React.FC<ChatViewProps> = ({
         >
           <div className="relative w-full max-w-5xl max-h-[92vh] overflow-y-auto rounded-2xl bg-slate-950 border border-emerald-500/50 shadow-2xl p-2 sm:p-4">
             <OmegaCodeSandbox onClose={() => setShowCodeSandbox(false)} />
+          </div>
+        </div>
+      )}
+
+      {/* Complex Operations Laboratory Modal */}
+      {showComplexLabModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto"
+          dir="rtl"
+        >
+          <div className="relative w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-2xl bg-slate-950 border border-purple-500/50 shadow-2xl p-2 sm:p-4">
+            <ComplexOperationsLab onClose={() => setShowComplexLabModal(false)} />
           </div>
         </div>
       )}

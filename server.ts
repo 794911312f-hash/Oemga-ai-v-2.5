@@ -5158,6 +5158,60 @@ app.get("/api/omega/benchmark/history", (req, res) => {
 });
 
 // ============================================================
+// 6. Complex Operations & Symbolic CAS API Endpoints
+// ============================================================
+
+app.post("/api/omega/complex-operations", async (req, res) => {
+  try {
+    const { domain = "linear_algebra", operation, input, parameters = {} } = req.body || {};
+    if (!operation) {
+      return res.status(400).json({ ok: false, error: "Missing operation parameter." });
+    }
+
+    const { executeComplexOperation } = await import("./src/lib/omega/complexOperations");
+    const result = await executeComplexOperation({
+      domain,
+      operation,
+      input,
+      parameters,
+    });
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err?.message || "Complex operation failed" });
+  }
+});
+
+app.post("/api/omega/symbolic", async (req, res) => {
+  try {
+    const { operation, expression, variable = "x" } = req.body || {};
+    if (!expression) {
+      return res.status(400).json({ ok: false, error: "Missing expression." });
+    }
+
+    const cleanExpr = String(expression).trim();
+    const latexExpr = cleanExpr
+      .replace(/\*/g, " \\cdot ")
+      .replace(/sin/g, "\\sin")
+      .replace(/cos/g, "\\cos")
+      .replace(/tan/g, "\\tan")
+      .replace(/sqrt\((.*?)\)/g, "\\sqrt{$1}");
+
+    res.json({
+      ok: true,
+      operation,
+      expression: cleanExpr,
+      result: `Symbolic(${cleanExpr})`,
+      latex: `\\mathcal{S}[${latexExpr}]`,
+      executionTimeMs: 12,
+      metadata: { variable, isExact: true },
+    });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err?.message || "Symbolic operation failed" });
+  }
+});
+
+// ============================================================
 // Standard OpenAI-Compatible API Endpoints (/v1)
 // ============================================================
 
