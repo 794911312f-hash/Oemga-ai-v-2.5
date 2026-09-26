@@ -45,6 +45,8 @@ import {
   GitBranch,
   BookOpen,
   Compass,
+  Cpu,
+  Server,
 } from "lucide-react";
 import type { ChatMessage, ChatAttachment } from "../../lib/omega/types";
 import { fuseResponses, type FusionResult } from "../../lib/omega/fusion";
@@ -121,6 +123,8 @@ import {
 import { OmegaNotebookModal } from "./OmegaNotebookModal";
 import { OmegaCodeSandbox } from "./OmegaCodeSandbox";
 import { ComplexOperationsLab } from "./ComplexOperationsLab";
+import { RealEngineConnectorModal } from "./RealEngineConnectorModal";
+import { OmegaProviderManagerTab } from "./OmegaProviderManagerTab";
 import {
   loadSessions,
   createSession,
@@ -317,6 +321,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [showCodeSandbox, setShowCodeSandbox] = useState<boolean>(false);
   const [showLiveVoiceModal, setShowLiveVoiceModal] = useState<boolean>(false);
   const [showComplexLabModal, setShowComplexLabModal] = useState<boolean>(false);
+  const [showEngineBridgeModal, setShowEngineBridgeModal] = useState<boolean>(false);
+  const [showProviderManagerModal, setShowProviderManagerModal] = useState<boolean>(false);
 
   // Direct Voice Interaction with Audio Frequency Analysis
   const chatVoice = useVoiceInteraction({
@@ -2050,6 +2056,28 @@ export const ChatView: React.FC<ChatViewProps> = ({
           <span>العمليات المعقدة</span>
         </button>
 
+        {/* Media Router & Multi-Provider Manager Trigger */}
+        <button
+          type="button"
+          onClick={() => setShowProviderManagerModal(true)}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-500/50 text-indigo-200 hover:text-white transition-colors shrink-0 cursor-pointer shadow-sm"
+          title="إدارة موجه وسائط الذكاء الاصطناعي (fal.ai, Replicate, Hugging Face, Together AI)"
+        >
+          <Server className="w-3.5 h-3.5 text-indigo-400" />
+          <span>موجه الوسائط والمزودين</span>
+        </button>
+
+        {/* Real GPU & Local Engine Bridge Trigger */}
+        <button
+          type="button"
+          onClick={() => setShowEngineBridgeModal(true)}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-200 hover:text-white transition-colors shrink-0 cursor-pointer shadow-sm"
+          title="ربط وفحص الخوادم والعتاد المحلي الحقيقي (Ollama, ComfyUI, vLLM)"
+        >
+          <Cpu className="w-3.5 h-3.5 text-emerald-400" />
+          <span>جسر العتاد (Ollama/GPU)</span>
+        </button>
+
         {/* Real-time Voice Interaction Room Trigger */}
         <button
           type="button"
@@ -2400,6 +2428,37 @@ export const ChatView: React.FC<ChatViewProps> = ({
         >
           <div className="relative w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-2xl bg-slate-950 border border-purple-500/50 shadow-2xl p-2 sm:p-4">
             <ComplexOperationsLab onClose={() => setShowComplexLabModal(false)} />
+          </div>
+        </div>
+      )}
+
+      {/* Real Local GPU & Engine Connector Modal */}
+      <RealEngineConnectorModal
+        isOpen={showEngineBridgeModal}
+        onClose={() => setShowEngineBridgeModal(false)}
+      />
+
+      {/* Media Router & Multi-Provider Manager Modal */}
+      {showProviderManagerModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto"
+          dir="rtl"
+        >
+          <div className="relative w-full max-w-5xl max-h-[92vh] overflow-y-auto rounded-2xl bg-slate-950 border border-purple-500/50 shadow-2xl p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Server className="w-5 h-5 text-purple-400" />
+                <h3 className="font-bold text-white text-base">استوديو توجيه الوسائط وإدارة المزودين (Media Router & Provider Manager)</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowProviderManagerModal(false)}
+                className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <OmegaProviderManagerTab />
           </div>
         </div>
       )}

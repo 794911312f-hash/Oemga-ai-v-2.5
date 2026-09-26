@@ -29,6 +29,11 @@ import {
 } from "../../lib/omega/kernel";
 import { AudioFrequencyVisualizer } from "./AudioFrequencyVisualizer";
 import { AudioFrequencyEngine } from "../../lib/omega/audioFrequency";
+import {
+  detectHardwareCapabilities,
+  type HardwareProfile,
+  type AvatarExecutionTier,
+} from "../../lib/omega/hardwareDetector";
 
 export interface OmegaProfessor3DProps {
   currentContext?: string;
@@ -167,6 +172,17 @@ export const OmegaProfessor3D: React.FC<OmegaProfessor3DProps> = ({
   const [oldManPitch, setOldManPitch] = useState<number>(0.68);
   const [oldManRate, setOldManRate] = useState<number>(0.84);
   const [showVoiceSettings, setShowVoiceSettings] = useState<boolean>(false);
+
+  // Hardware Profiling & Execution Tier (Hybrid Architecture)
+  const [hardwareProfile, setHardwareProfile] = useState<HardwareProfile | null>(null);
+  const [executionTier, setExecutionTier] = useState<AvatarExecutionTier>("tier1_procedural");
+
+  useEffect(() => {
+    detectHardwareCapabilities().then((profile) => {
+      setHardwareProfile(profile);
+      setExecutionTier(profile.recommendedTier);
+    });
+  }, []);
 
   // Live Refs for 60fps Three.js loop (avoids stale React state closures)
   const isSpeakingRef = useRef<boolean>(false);
@@ -1661,6 +1677,26 @@ export const OmegaProfessor3D: React.FC<OmegaProfessor3DProps> = ({
             <Activity className="w-3 h-3 text-purple-400" />
             <span>H: {kernelState.entropy.toFixed(2)}</span>
           </div>
+          {hardwareProfile && (
+            <div
+              className={`px-2 py-0.5 rounded-lg border text-[9px] font-mono flex items-center gap-1 shadow ${
+                executionTier === "tier2_webgpu"
+                  ? "bg-emerald-950/80 border-emerald-500/40 text-emerald-300"
+                  : executionTier === "tier3_neural_cloud"
+                  ? "bg-purple-950/80 border-purple-500/40 text-purple-300"
+                  : "bg-slate-950/80 border-slate-700/60 text-slate-300"
+              }`}
+            >
+              <Sparkles className="w-2.5 h-2.5" />
+              <span>
+                {executionTier === "tier2_webgpu"
+                  ? "WebGPU 60fps"
+                  : executionTier === "tier3_neural_cloud"
+                  ? "LivePortrait AI"
+                  : "Light 3D (0ms)"}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Bottom Controls Overlay */}

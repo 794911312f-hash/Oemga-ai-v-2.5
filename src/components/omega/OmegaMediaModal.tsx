@@ -22,6 +22,8 @@ import {
   Square,
   Radio,
   Download,
+  Server,
+  Settings,
 } from "lucide-react";
 import {
   OMEGA_VIDEO_MODELS,
@@ -42,12 +44,18 @@ import {
   synthesizeSpeechToWavBlob,
   triggerAudioFileDownload,
 } from "../../lib/omega/audioExporter";
+import {
+  globalMediaRouter,
+  MEDIA_PROVIDERS_CATALOG,
+  type MediaProviderId,
+} from "../../lib/omega/universalMediaRouter";
+import { OmegaProviderManagerTab } from "./OmegaProviderManagerTab";
 
 export interface OmegaMediaModalProps {
   isOpen: boolean;
   onClose: () => void;
   onGenerate?: (data: {
-    type: "image" | "video" | "pipeline" | "voice";
+    type: "image" | "video" | "pipeline" | "voice" | "router";
     prompt: string;
     aspectRatio?: string;
     style?: string;
@@ -58,9 +66,11 @@ export interface OmegaMediaModalProps {
     originalUserPrompt?: string;
     voicePersonaId?: string;
     voiceEngineId?: string;
+    provider?: string;
+    keys?: Record<string, string>;
   }) => Promise<void> | void;
   onSubmit?: (data: {
-    type: "image" | "video" | "pipeline" | "voice";
+    type: "image" | "video" | "pipeline" | "voice" | "router";
     prompt: string;
     aspectRatio?: string;
     style?: string;
@@ -71,6 +81,8 @@ export interface OmegaMediaModalProps {
     originalUserPrompt?: string;
     voicePersonaId?: string;
     voiceEngineId?: string;
+    provider?: string;
+    keys?: Record<string, string>;
   }) => Promise<void> | void;
 }
 
@@ -144,7 +156,7 @@ export const OmegaMediaModal: React.FC<OmegaMediaModalProps> = ({
   onGenerate,
   onSubmit,
 }) => {
-  const [mediaType, setMediaType] = useState<"pipeline" | "voice" | "video" | "image">("pipeline");
+  const [mediaType, setMediaType] = useState<"pipeline" | "voice" | "video" | "image" | "router">("pipeline");
   const [selectedScientistId, setSelectedScientistId] = useState<string>("newton");
   const [pipelineMode, setPipelineMode] = useState<"flagship" | "open_source">("open_source");
   const [selectedVoiceCategory, setSelectedVoiceCategory] = useState<VoiceCategory>("scientists");
@@ -282,7 +294,7 @@ export const OmegaMediaModal: React.FC<OmegaMediaModalProps> = ({
             <label className="block text-xs font-semibold text-slate-300 mb-2">
               اختر مسار الإنتاج المطلوب:
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
               {/* Pipeline Mode */}
               <button
                 type="button"
@@ -290,7 +302,7 @@ export const OmegaMediaModal: React.FC<OmegaMediaModalProps> = ({
                   setMediaType("pipeline");
                   setPrompt(selectedScientist.defaultTopicAr);
                 }}
-                className={`flex flex-col items-start p-2.5 rounded-xl border text-right transition-all cursor-pointer ${
+                className={`flex flex-col items-start p-2 rounded-xl border text-right transition-all cursor-pointer ${
                   mediaType === "pipeline"
                     ? "bg-purple-950/90 border-purple-400 text-white shadow-lg shadow-purple-950/60 ring-1 ring-purple-400/50"
                     : "bg-slate-900/50 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-900"
@@ -317,7 +329,7 @@ export const OmegaMediaModal: React.FC<OmegaMediaModalProps> = ({
                   setMediaType("voice");
                   setPrompt(selectedPersona.sampleQuoteAr);
                 }}
-                className={`flex flex-col items-start p-2.5 rounded-xl border text-right transition-all cursor-pointer ${
+                className={`flex flex-col items-start p-2 rounded-xl border text-right transition-all cursor-pointer ${
                   mediaType === "voice"
                     ? "bg-emerald-950/90 border-emerald-400 text-white shadow-lg shadow-emerald-950/60 ring-1 ring-emerald-400/50"
                     : "bg-slate-900/50 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-900"
@@ -344,7 +356,7 @@ export const OmegaMediaModal: React.FC<OmegaMediaModalProps> = ({
                   setMediaType("video");
                   setPrompt("مشهد سينمائي فائق الواقعية في الفضاء الكوني يوضح حركة الكواكب والنجوم...");
                 }}
-                className={`flex flex-col items-start p-2.5 rounded-xl border text-right transition-all cursor-pointer ${
+                className={`flex flex-col items-start p-2 rounded-xl border text-right transition-all cursor-pointer ${
                   mediaType === "video"
                     ? "bg-cyan-950/90 border-cyan-400 text-white shadow-lg shadow-cyan-950/60 ring-1 ring-cyan-400/50"
                     : "bg-slate-900/50 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-900"
@@ -371,7 +383,7 @@ export const OmegaMediaModal: React.FC<OmegaMediaModalProps> = ({
                   setMediaType("image");
                   setPrompt("لوحة فلسفية فوتوغرافية بدقة 8K تعكس انحناء نسيج الزمكان...");
                 }}
-                className={`flex flex-col items-start p-2.5 rounded-xl border text-right transition-all cursor-pointer ${
+                className={`flex flex-col items-start p-2 rounded-xl border text-right transition-all cursor-pointer ${
                   mediaType === "image"
                     ? "bg-pink-950/90 border-pink-400 text-white shadow-lg shadow-pink-950/60 ring-1 ring-pink-400/50"
                     : "bg-slate-900/50 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-900"
@@ -390,8 +402,41 @@ export const OmegaMediaModal: React.FC<OmegaMediaModalProps> = ({
                   توليد صور فوتوغرافية ولوحات فلسفية وعلمية 8K واقعية
                 </p>
               </button>
+
+              {/* Multi-Provider Manager & Router Tab */}
+              <button
+                type="button"
+                onClick={() => setMediaType("router")}
+                className={`flex flex-col items-start p-2 rounded-xl border text-right transition-all cursor-pointer ${
+                  mediaType === "router"
+                    ? "bg-indigo-950/90 border-indigo-400 text-white shadow-lg shadow-indigo-950/60 ring-1 ring-indigo-400/50"
+                    : "bg-slate-900/50 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                }`}
+              >
+                <div className="flex items-center justify-between w-full mb-1">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-300">
+                    <Server className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>موجه المزودين</span>
+                  </div>
+                  <span className="text-[8.5px] px-1 py-0.5 rounded bg-indigo-900/80 text-indigo-200 font-mono">
+                    HF/fal/Rep
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-snug">
+                  إدارة المزودين السحابية، فحص السرعة، والتحويل التلقائي
+                </p>
+              </button>
             </div>
           </div>
+
+          {/* ============================================================== */}
+          {/* PROVIDER MANAGER & MEDIA ROUTER STUDIO (WHEN ROUTER SELECTED) */}
+          {/* ============================================================== */}
+          {mediaType === "router" && (
+            <div className="p-1">
+              <OmegaProviderManagerTab />
+            </div>
+          )}
 
           {/* ============================================================== */}
           {/* VOICE STUDIO CONTROLS (WHEN VOICE IS SELECTED)                */}
@@ -877,151 +922,158 @@ export const OmegaMediaModal: React.FC<OmegaMediaModalProps> = ({
             </div>
           )}
 
-          {/* Prompt Input */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-              {mediaType === "pipeline"
-                ? "موضوع الدرس العلمي أو الظاهرة المراد شرحها:"
-                : mediaType === "voice"
-                ? "النص أو الشرح المراد نطقه بصوت الشخصية (Text to Speech):"
-                : mediaType === "video"
-                ? "وصف المشهد المراد إنشاؤه في الفيديو (Prompt):"
-                : "وصف تفاصيل الصورة بدقة (Prompt):"}
-            </label>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder={
-                mediaType === "pipeline"
-                  ? "مثال: نيوتن يشرح الجاذبية الكونية وسقوط التفاحة والتفاضل والتكامل..."
-                  : mediaType === "voice"
-                  ? "اكتب النص أو السؤال أو المقال العلمي ليقوم أوميغا بنطقه بهذا الصوت..."
-                  : mediaType === "video"
-                  ? "صف حركة الكاميرا والظاهرة الفيزيائية أو السينمائية..."
-                  : "صف تفاصيل المشهد بدقة عالية وألوان وتكوين فني..."
-              }
-              rows={3}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 transition-colors resize-none"
-              required
-            />
-          </div>
-
-          {/* Prompt Suggestions */}
-          <div>
-            <span className="block text-[11px] text-slate-400 mb-1.5 font-medium">
-              اقتراحات سريعة جاهزة:
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {PROMPT_SUGGESTIONS.filter((s) => s.type === (mediaType === "voice" ? "pipeline" : mediaType)).map((s, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => {
-                    setPrompt(s.prompt);
-                    if ("scientistId" in s && s.scientistId) {
-                      setSelectedScientistId(s.scientistId);
-                    }
-                  }}
-                  className="px-2.5 py-1 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px] text-slate-300 hover:text-cyan-300 hover:border-cyan-500/50 transition-colors cursor-pointer text-right"
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Aspect Ratio & Style (For Video and Image only) */}
-          {(mediaType === "video" || mediaType === "image") && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+          {/* ============================================================== */}
+          {/* PROMPT & CONTROLS (WHEN NOT IN ROUTER MANAGER TAB)           */}
+          {/* ============================================================== */}
+          {mediaType !== "router" && (
+            <>
+              {/* Prompt Input */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  نسبة العرض والأبعاد:
+                  {mediaType === "pipeline"
+                    ? "موضوع الدرس العلمي أو الظاهرة المراد شرحها:"
+                    : mediaType === "voice"
+                    ? "النص أو الشرح المراد نطقه بصوت الشخصية (Text to Speech):"
+                    : mediaType === "video"
+                    ? "وصف المشهد المراد إنشاؤه في الفيديو (Prompt):"
+                    : "وصف تفاصيل الصورة بدقة (Prompt):"}
                 </label>
-                <select
-                  value={aspectRatio}
-                  onChange={(e) => setAspectRatio(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
-                >
-                  <option value="16:9">أفقي سينمائي (16:9 Landscape)</option>
-                  <option value="1:1">مربع مثالي (1:1 Square)</option>
-                  <option value="9:16">طولي للهاتف (9:16 Portrait)</option>
-                  <option value="4:3">قياسي (4:3 Standard)</option>
-                </select>
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder={
+                    mediaType === "pipeline"
+                      ? "مثال: نيوتن يشرح الجاذبية الكونية وسقوط التفاحة والتفاضل والتكامل..."
+                      : mediaType === "voice"
+                      ? "اكتب النص أو السؤال أو المقال العلمي ليقوم أوميغا بنطقه بهذا الصوت..."
+                      : mediaType === "video"
+                      ? "صف حركة الكاميرا والظاهرة الفيزيائية أو السينمائية..."
+                      : "صف تفاصيل المشهد بدقة عالية وألوان وتكوين فني..."
+                  }
+                  rows={3}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 transition-colors resize-none"
+                  required
+                />
               </div>
 
+              {/* Prompt Suggestions */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  الأسلوب الفني:
-                </label>
-                <select
-                  value={style}
-                  onChange={(e) => setStyle(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
-                >
-                  <option value="cinematic">واقعي سينمائي (Cinematic Realistic)</option>
-                  <option value="digital_art">فن رقمي ثلاثي الأبعاد (3D Digital Art)</option>
-                  <option value="sacred_geometry">هندسة مقدسة وفلسفية (Sacred Geometry)</option>
-                  <option value="cyberpunk">خيال علمي سريالي (Cyberpunk Surreal)</option>
-                  <option value="oil_painting">لوحة زيتية كلاسيكية (Oil Painting)</option>
-                </select>
+                <span className="block text-[11px] text-slate-400 mb-1.5 font-medium">
+                  اقتراحات سريعة جاهزة:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {PROMPT_SUGGESTIONS.filter((s) => s.type === (mediaType === "voice" ? "pipeline" : mediaType)).map((s, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setPrompt(s.prompt);
+                        if ("scientistId" in s && s.scientistId) {
+                          setSelectedScientistId(s.scientistId);
+                        }
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px] text-slate-300 hover:text-cyan-300 hover:border-cyan-500/50 transition-colors cursor-pointer text-right"
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+
+              {/* Aspect Ratio & Style (For Video and Image only) */}
+              {(mediaType === "video" || mediaType === "image") && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      نسبة العرض والأبعاد:
+                    </label>
+                    <select
+                      value={aspectRatio}
+                      onChange={(e) => setAspectRatio(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+                    >
+                      <option value="16:9">أفقي سينمائي (16:9 Landscape)</option>
+                      <option value="1:1">مربع مثالي (1:1 Square)</option>
+                      <option value="9:16">طولي للهاتف (9:16 Portrait)</option>
+                      <option value="4:3">قياسي (4:3 Standard)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      الأسلوب الفني:
+                    </label>
+                    <select
+                      value={style}
+                      onChange={(e) => setStyle(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+                    >
+                      <option value="cinematic">واقعي سينمائي (Cinematic Realistic)</option>
+                      <option value="digital_art">فن رقمي ثلاثي الأبعاد (3D Digital Art)</option>
+                      <option value="sacred_geometry">هندسة مقدسة وفلسفية (Sacred Geometry)</option>
+                      <option value="cyberpunk">خيال علمي سريالي (Cyberpunk Surreal)</option>
+                      <option value="oil_painting">لوحة زيتية كلاسيكية (Oil Painting)</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Footer Submit Button */}
+              <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>
+                    {mediaType === "pipeline"
+                      ? "تكامل 7 مراحل • شارة المحاكاة العلمية نشطة"
+                      : mediaType === "voice"
+                      ? `برنامج صوتي نشط: ${selectedVoiceEngine.name} • ${selectedPersona.nameAr}`
+                      : "توليد فوري ومحاكاة فيزيائية حركية"}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:text-white hover:bg-slate-900 transition-colors cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isGenerating || !prompt.trim()}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white text-xs font-bold shadow-lg shadow-purple-900/40 disabled:opacity-50 transition-all cursor-pointer"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>
+                          {mediaType === "pipeline"
+                            ? `جاري تشغيل خط إنتاج محاكاة ${selectedScientist.nameAr}...`
+                            : mediaType === "voice"
+                            ? `جاري تهيئة الصوت...`
+                            : `جاري التوليد...`}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4" />
+                        <span>
+                          {mediaType === "pipeline"
+                            ? `بدء خط إنتاج محاكاة ${selectedScientist.nameAr}`
+                            : mediaType === "voice"
+                            ? `تفعيل وإرسال بصوت ${selectedPersona.nameAr}`
+                            : mediaType === "video"
+                            ? `توليد الفيديو (${currentModelSpec?.name})`
+                            : "توليد الصورة الفائقة"}
+                        </span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </>
           )}
-
-          {/* Footer Submit Button */}
-          <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>
-                {mediaType === "pipeline"
-                  ? "تكامل 7 مراحل • شارة المحاكاة العلمية نشطة"
-                  : mediaType === "voice"
-                  ? `برنامج صوتي نشط: ${selectedVoiceEngine.name} • ${selectedPersona.nameAr}`
-                  : "توليد فوري ومحاكاة فيزيائية حركية"}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:text-white hover:bg-slate-900 transition-colors cursor-pointer"
-              >
-                إلغاء
-              </button>
-              <button
-                type="submit"
-                disabled={isGenerating || !prompt.trim()}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white text-xs font-bold shadow-lg shadow-purple-900/40 disabled:opacity-50 transition-all cursor-pointer"
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>
-                      {mediaType === "pipeline"
-                        ? `جاري تشغيل خط إنتاج محاكاة ${selectedScientist.nameAr}...`
-                        : mediaType === "voice"
-                        ? `جاري تهيئة الصوت...`
-                        : `جاري التوليد...`}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4" />
-                    <span>
-                      {mediaType === "pipeline"
-                        ? `بدء خط إنتاج محاكاة ${selectedScientist.nameAr}`
-                        : mediaType === "voice"
-                        ? `تفعيل وإرسال بصوت ${selectedPersona.nameAr}`
-                        : mediaType === "video"
-                        ? `توليد الفيديو (${currentModelSpec?.name})`
-                        : "توليد الصورة الفائقة"}
-                    </span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
         </form>
       </div>
     </div>

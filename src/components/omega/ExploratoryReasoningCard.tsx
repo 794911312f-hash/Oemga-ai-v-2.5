@@ -108,7 +108,7 @@ export const ExploratoryReasoningCard: React.FC<ExploratoryReasoningCardProps> =
   const [isSearchingOEIS, setIsSearchingOEIS] = useState<boolean>(false);
 
   useEffect(() => {
-    setMemoryBank(getHypothesisVectorStore());
+    setMemoryBank(getHypothesisVectorStore().getAll());
   }, []);
 
   useEffect(() => {
@@ -145,7 +145,7 @@ export const ExploratoryReasoningCard: React.FC<ExploratoryReasoningCardProps> =
         activePathway.falsificationTests.filter((t) => t.result === "survived").length
       } من أصل ${activePathway.falsificationTests.length} اختبارات تفنيد`,
     });
-    setMemoryBank(getHypothesisVectorStore());
+    setMemoryBank(getHypothesisVectorStore().getAll());
     setSavedSuccessFeedback(true);
     setTimeout(() => setSavedSuccessFeedback(false), 3500);
   };
@@ -875,7 +875,7 @@ export const ExploratoryReasoningCard: React.FC<ExploratoryReasoningCardProps> =
                     <div className="mt-3">
                       <SymbolicCASWorkbench
                         onHypothesisSaved={() => {
-                          setMemoryBank(getHypothesisVectorStore());
+                          setMemoryBank(getHypothesisVectorStore().getAll());
                         }}
                       />
                     </div>

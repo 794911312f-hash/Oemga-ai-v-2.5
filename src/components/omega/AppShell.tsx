@@ -25,11 +25,12 @@ import { OptimizerLab } from "./OptimizerLab";
 import { SymbolicCASWorkbench } from "./SymbolicCASWorkbench";
 import { AdvancedOrchestratorLab } from "./AdvancedOrchestratorLab";
 import { OmegaEvolutionLab } from "./OmegaEvolutionLab";
+import { OmegaAutonomousAgentTab } from "./OmegaAutonomousAgentTab";
 import { AuthModal, type OmegaUser } from "./AuthModal";
 import { DEFAULT_OMEGA_CONFIG, type OmegaConfig } from "../../lib/omega/optimizer";
 import type { FusionResult } from "../../lib/omega/fusion";
 
-export type NavTab = "chat" | "kernel" | "memory" | "lineage" | "optimizer" | "cas" | "orchestrator" | "evolution";
+export type NavTab = "chat" | "kernel" | "autonomous" | "memory" | "lineage" | "optimizer" | "cas" | "orchestrator" | "evolution";
 
 export const AppShell: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>("chat");
@@ -82,6 +83,12 @@ export const AppShell: React.FC = () => {
       label: "مختبر نواة الحالة",
       subLabel: "Kernel Lab",
       icon: Brain,
+    },
+    {
+      id: "autonomous" as NavTab,
+      label: "المهام المستقلة والتصحيح الذاتي",
+      subLabel: "Autonomous Agent",
+      icon: Zap,
     },
     {
       id: "memory" as NavTab,
@@ -243,6 +250,7 @@ export const AppShell: React.FC = () => {
         {activeTab === "kernel" && (
           <KernelLab initialResult={inspectedResult} />
         )}
+        {activeTab === "autonomous" && <OmegaAutonomousAgentTab />}
         {activeTab === "memory" && <MemoryView />}
         {activeTab === "lineage" && <LineageView />}
         {activeTab === "optimizer" && (

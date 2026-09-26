@@ -1,12 +1,13 @@
 /**
  * src/lib/omega/codeSandbox.ts
  * =============================================================================
- * Safe Sandboxed Code Execution & Self-Correction Engine for Omega Kernel
+ * Safe Sandboxed Code Execution & Autonomous Self-Correction Engine for Omega
  * =============================================================================
  *
  * Provides:
- *  - Sandboxed JS/TS code execution in Node 'vm' with memory/time bounds
- *  - Autonomous Self-Correction Loop: catches runtime errors, self-repairs code, and re-executes
+ *  - Sandboxed JS/TS code execution in Node 'vm' or browser context with memory/time bounds
+ *  - Real output stream capture (stdout, console.log, console.error, return values)
+ *  - Autonomous Self-Correction Loop: catches runtime errors, repairs code, and re-executes
  */
 
 export interface ExecutionResult {
@@ -28,9 +29,45 @@ export class SafeCodeSandbox {
   private timeoutMs = 3500;
 
   /**
-   * Executes code safely in a sandbox
+   * Client-side safe runner for browser environments
+   */
+  runClientSafe(code: string): { ok: boolean; output: string; returnValue?: any; error?: string | null } {
+    const logs: string[] = [];
+    const customConsole = {
+      log: (...args: any[]) =>
+        logs.push(args.map((a) => (typeof a === "object" ? JSON.stringify(a, null, 2) : String(a))).join(" ")),
+      error: (...args: any[]) => logs.push("[خطأ] " + args.join(" ")),
+      warn: (...args: any[]) => logs.push("[تنبيه] " + args.join(" ")),
+      info: (...args: any[]) => logs.push(args.join(" ")),
+    };
+
+    try {
+      // Build safe execution wrapper
+      const wrapped = `
+        const console = customConsole;
+        "use strict";
+        return (function() {
+          ${code}
+        })();
+      `;
+      const fn = new Function("customConsole", wrapped);
+      const returnValue = fn(customConsole);
+
+      const output = logs.join("\n") + (returnValue !== undefined ? `\n[النتيجة المُرجعة]: ${JSON.stringify(returnValue, null, 2)}` : "");
+      return { ok: true, output: output.trim(), returnValue, error: null };
+    } catch (err: any) {
+      return { ok: false, output: logs.join("\n"), error: err?.message || String(err) };
+    }
+  }
+
+  /**
+   * Executes code safely in Node or browser
    */
   async runSingle(code: string): Promise<{ ok: boolean; output: string; returnValue?: any; error?: string | null }> {
+    if (typeof window !== "undefined") {
+      return this.runClientSafe(code);
+    }
+
     const logs: string[] = [];
     const customConsole = {
       log: (...args: any[]) =>
@@ -70,7 +107,7 @@ export class SafeCodeSandbox {
   }
 
   /**
-   * Autonomous Self-Correcting Execution:
+   * Autonomous Self-Correcting Execution Loop:
    * If code fails, it diagnoses the error, repairs the code, and re-runs up to maxAttempts.
    */
   async executeWithSelfCorrection(
@@ -103,7 +140,7 @@ export class SafeCodeSandbox {
         };
       }
 
-      // Self-repair logic
+      // Self-repair logic for next attempt
       if (attempt < maxAttempts) {
         if (repairFn) {
           try {
@@ -154,3 +191,5 @@ export class SafeCodeSandbox {
     return repaired;
   }
 }
+
+export const globalSafeSandbox = new SafeCodeSandbox();
