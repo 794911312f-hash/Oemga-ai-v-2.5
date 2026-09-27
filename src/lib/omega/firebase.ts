@@ -260,6 +260,7 @@ export async function findSimilarExperiences(
       const sim = na && nb ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;
       return { ...x, _sim: sim };
     })
+    .filter((x) => (x._sim ?? 0) >= 0.65)
     .sort((a, b) => (b._sim ?? 0) - (a._sim ?? 0))
     .slice(0, limitCount);
 }
@@ -325,6 +326,7 @@ export async function searchMemory(
       const sim = na && nb ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;
       return { ...x, _sim: sim };
     })
+    .filter((x) => (x._sim ?? 0) >= 0.65)
     .sort((a, b) => (b._sim ?? 0) - (a._sim ?? 0))
     .slice(0, limitCount);
 }

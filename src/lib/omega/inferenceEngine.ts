@@ -173,17 +173,24 @@ export class MemoryMatrix {
       .slice(0, k);
   }
 
-  /** استعلام دلالي عبر التضمين + المصفوفة */
+  /** استعلام دلالي عبر التضمين + المصفوفة (فقط عند التطابق الفعلي للموضوع) */
   query(text: string, k = 5): { concept: string; score: number }[] {
     const q = hashEmbed(text, this.dim);
-    const scored = this.concepts.map((c) => {
-      const emb = this.embeddings.get(c)!;
-      const sim = cosine(q, emb);
-      const i = this.conceptIndex.get(c)!;
-      const degree = this.matrix[i].reduce((s, v) => s + v, 0) / Math.max(1, this.concepts.length);
-      return { concept: c, score: 0.7 * sim + 0.3 * degree };
-    });
-    return scored.sort((a, b) => b.score - a.score).slice(0, k);
+    const qLower = text.toLowerCase();
+    const scored = this.concepts
+      .map((c) => {
+        const emb = this.embeddings.get(c)!;
+        const sim = cosine(q, emb);
+        const i = this.conceptIndex.get(c)!;
+        const degree = this.matrix[i].reduce((s, v) => s + v, 0) / Math.max(1, this.concepts.length);
+        const hasDirectWord = c.length > 3 && qLower.includes(c);
+        return { concept: c, score: (hasDirectWord ? 0.4 : 0) + 0.7 * sim + 0.3 * degree, sim, hasDirectWord };
+      })
+      .filter((x) => x.hasDirectWord || x.sim > 0.65);
+    return scored
+      .sort((a, b) => b.score - a.score)
+      .slice(0, k)
+      .map(({ concept, score }) => ({ concept, score }));
   }
 
   /** تطبيق نسيان تدريجي على كل الروابط */
@@ -359,7 +366,7 @@ export class ExperienceMatrix {
     const q = hashEmbed(question, this.dim);
     return this.records
       .map((r) => ({ r, sim: cosine(q, r.embedding) }))
-      .filter((x) => x.sim > 0.12)
+      .filter((x) => x.sim > 0.62)
       .sort((a, b) => b.sim - a.sim)
       .slice(0, k)
       .map((x) => x.r);
@@ -662,14 +669,17 @@ export class KnowledgeGraph {
   }
 
   /**
-   * استنتاج بسيط: مسارات بطول 2 من عقد مرتبطة بالسؤال
-   * → "حقائق" مرشحة لم تُذكر مباشرة
+   * استنتاج بسيط: مسارات بطول 2 من عقد مرتبطة فعلياً بالسؤال
    */
   infer(question: string, maxFacts = 5): string[] {
     const qVec = hashEmbed(question, this.dim);
+    const qLower = question.toLowerCase();
     const seeds = [...this.nodes.values()]
-      .map((n) => ({ n, sim: cosine(qVec, n.embedding) * n.weight }))
-      .filter((x) => x.sim > 0.15)
+      .map((n) => {
+        const directMatch = n.label.length > 3 && qLower.includes(n.label.toLowerCase());
+        return { n, sim: cosine(qVec, n.embedding) * n.weight, directMatch };
+      })
+      .filter((x) => x.directMatch || x.sim > 0.65)
       .sort((a, b) => b.sim - a.sim)
       .slice(0, 6)
       .map((x) => x.n.id);

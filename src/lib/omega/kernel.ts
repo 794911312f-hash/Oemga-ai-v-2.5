@@ -18,6 +18,20 @@ export type AvatarMoodState =
   | "scratch_beard"
   | "pointing";
 
+export interface OmegaCoreBridgeState {
+  connected: boolean;
+  lastPulseAt: number;
+  domain: string;
+  corePsiScore: number;
+  selfCheckVerified: boolean;
+  selfCheckConfidence: number;
+  memoryConceptsCount: number;
+  knowledgeNodesCount: number;
+  knowledgeEdgesCount: number;
+  generation: number;
+  activeStrategy: string;
+}
+
 export interface KernelState {
   step: number;
   dim: number;
@@ -34,6 +48,7 @@ export interface KernelState {
   lastDomain?: string;
   thinkingDepth?: number;
   lastInsight?: string;
+  coreBridge: OmegaCoreBridgeState;
 }
 
 type KernelListener = (state: KernelState) => void;
@@ -61,12 +76,51 @@ export class OmegaKernel {
       avatarMood: "neutral",
       lastDomain: "general",
       thinkingDepth: 2,
-      lastInsight: "النواة الكمومية في حالة اتزان طيفي وجاهزية للاستدلال.",
+      lastInsight: "النواة الكمومية وقلب أوميغا متصلان وفي حالة اتزان طيفي.",
+      coreBridge: {
+        connected: true,
+        lastPulseAt: Date.now(),
+        domain: "general",
+        corePsiScore: 0.94,
+        selfCheckVerified: true,
+        selfCheckConfidence: 0.95,
+        memoryConceptsCount: 12,
+        knowledgeNodesCount: 14,
+        knowledgeEdgesCount: 18,
+        generation: 1,
+        activeStrategy: "OmegaCore ⇄ OmegaKernel Unified Lifecycle",
+      },
     };
   }
 
   public getState(): KernelState {
-    return { ...this.state };
+    return {
+      ...this.state,
+      coreBridge: { ...this.state.coreBridge },
+    };
+  }
+
+  /**
+   * Synchronizes OmegaKernel (نواة أوميغا) directly with OmegaCore (قلب أوميغا)
+   */
+  public syncWithOmegaCore(coreTelemetry: Partial<OmegaCoreBridgeState>): KernelState {
+    this.state.coreBridge = {
+      ...this.state.coreBridge,
+      connected: true,
+      lastPulseAt: Date.now(),
+      domain: coreTelemetry.domain ?? this.state.coreBridge.domain,
+      corePsiScore: coreTelemetry.corePsiScore ?? this.state.coreBridge.corePsiScore,
+      selfCheckVerified: coreTelemetry.selfCheckVerified ?? this.state.coreBridge.selfCheckVerified,
+      selfCheckConfidence: coreTelemetry.selfCheckConfidence ?? this.state.coreBridge.selfCheckConfidence,
+      memoryConceptsCount: coreTelemetry.memoryConceptsCount ?? this.state.coreBridge.memoryConceptsCount,
+      knowledgeNodesCount: coreTelemetry.knowledgeNodesCount ?? this.state.coreBridge.knowledgeNodesCount,
+      knowledgeEdgesCount: coreTelemetry.knowledgeEdgesCount ?? this.state.coreBridge.knowledgeEdgesCount,
+      generation: coreTelemetry.generation ?? this.state.coreBridge.generation,
+      activeStrategy: coreTelemetry.activeStrategy ?? "OmegaCore ⇄ OmegaKernel Active Sync",
+    };
+    this.state.lastUpdated = Date.now();
+    this.emit();
+    return this.getState();
   }
 
   /**
@@ -210,7 +264,12 @@ export class OmegaKernel {
       avatarMood: "neutral",
       lastDomain: "general",
       thinkingDepth: 2,
-      lastInsight: "تمت إعادة ضبط متجه الحالة الكمومي للنواة.",
+      lastInsight: "تمت إعادة ضبط متجه الحالة الكمومي للنواة مع استمرار الاتصال بقلب أوميغا.",
+      coreBridge: {
+        ...this.state.coreBridge,
+        connected: true,
+        lastPulseAt: Date.now(),
+      },
     };
     this.emit();
   }

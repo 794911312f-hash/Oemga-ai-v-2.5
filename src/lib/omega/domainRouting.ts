@@ -30,14 +30,16 @@ const DOMAIN_KEYWORDS: Record<Domain, string[]> = {
   ],
   math_logic: [
     "calculate", "solve", "equation", "proof", "matrix", "integral", "derivative",
-    "probability", "logic", "deduce", "theorem", "lemma", "arithmetic", "why",
-    "احسب", "معادلة", "برهان", "مصفوفة", "احتمال", "منطق", "تفاضل", "تكامل", "نظرية", "استنتاج"
+    "probability", "logic", "deduce", "theorem", "lemma", "arithmetic", "collatz", "riemann", "conjecture",
+    "احسب", "معادلة", "برهان", "مصفوفة", "احتمال", "منطق", "تفاضل", "تكامل", "نظرية", "استنتاج",
+    "كولاتز", "كولاطز", "فرضية", "حدسية", "ريمان", "رياضيات", "جبر", "هندسة", "أعداد"
   ],
   science_factual: [
     "quantum", "physics", "biology", "chemistry", "universe", "planet", "history",
-    "evidence", "experiment", "molecule", "genome", "cellular", "gravity", "energy",
+    "evidence", "experiment", "molecule", "genome", "cellular", "gravity", "energy", "newton", "free fall",
     "document", "pdf", "file", "report", "paper", "data", "sheet", "attachment",
     "فيزياء", "كيمياء", "أحياء", "كون", "كوكب", "تاريخ", "تجربة", "ذرة", "طاقة", "جاذبية", "خلية",
+    "نيوتن", "سقوط", "شاقولي", "السقوط", "الشاقولي", "تسارع", "قوة", "كتلة", "سرعة", "قانون نيوتن",
     "مستند", "وثيقة", "ملف", "تقرير", "بيانات", "مرفق", "مستندات", "وثائق", "دراسة", "بحث"
   ],
   creative_writing: [
@@ -47,7 +49,7 @@ const DOMAIN_KEYWORDS: Record<Domain, string[]> = {
   ],
   philosophy_theology: [
     "philosophy", "theology", "religion", "faith", "ethics", "morality", "existentialism",
-    "epistemology", "metaphysics", "ontology", "logic", "dialectic", "soul", "god", "afterlife",
+    "epistemology", "metaphysics", "ontology", "logic", "dialectic", "soul", "god", "afterlife", "omnipotence",
     "free will", "determinism", "islam", "christianity", "judaism", "buddhism", "hinduism", "taoism",
     "quran", "bible", "torah", "atheism", "agnosticism", "spinoza", "kant", "nietzsche", "al-ghazali",
     "ibn rushd", "aquinas", "problem of evil", "teleology", "consciousness",
@@ -55,7 +57,8 @@ const DOMAIN_KEYWORDS: Record<Domain, string[]> = {
     "معرفة", "إبستمولوجيا", "ميتافيزيقا", "أنطولوجيا", "حرية الإرادة", "حتمية", "مشكلة الشر", "إسلام",
     "مسيحية", "يهودية", "بوذية", "هندوسية", "طاوية", "القرآن", "الإنجيل", "التوراة", "ابن رشد", "الغزالي",
     "ابن سينا", "كانط", "نيتشه", "سبينوزا", "توما الأكويني", "الروح", "الوعي", "التوحيد", "التثليث",
-    "التناسخ", "الكارما", "المعنى", "العدالة الإلهية", "فلسفي", "فلسفية", "إشكالية", "إشكاليات"
+    "التناسخ", "الكارما", "المعنى", "العدالة الإلهية", "فلسفي", "فلسفية", "إشكالية", "إشكاليات",
+    "صخرة", "يستطيع حملها", "القدرة المطلقة", "مفارقة", "الله"
   ],
   news_social: [
     "news", "breaking", "social", "twitter", "tweet", "tweets", "x.com", "trending",

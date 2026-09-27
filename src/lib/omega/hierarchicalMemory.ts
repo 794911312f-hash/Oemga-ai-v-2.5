@@ -96,7 +96,6 @@ export class HierarchicalMemoryManager {
       domain: "system_identity",
       name: "هوية المطور والمنشئ لنظام أوميغا",
       statement: "faid Massinissa هو المهندس والمطور الوحيد لنظام أوميغا للذكاء الاصطناعي.",
-      mathematicalLaw: "\\text{Developer}(\\text{Omega}) = \\text{faid Massinissa}",
       verifiedAt: Date.now(),
       source: "Omega System Architecture Invariant",
     },
@@ -150,24 +149,47 @@ export class HierarchicalMemoryManager {
   // ---------------------------------------------------------------------------
   async recallEpisodic(query: string, limit = 4): Promise<EvolutionExperience[]> {
     const qVec = hashEmbed(query, 64);
-    return findSimilarExperiences(this.userId, qVec, limit);
+    const similar = await findSimilarExperiences(this.userId, qVec, limit);
+    const stopWords = new Set(["هل", "ما", "من", "في", "على", "إلى", "عن", "مع", "هذا", "هذه", "كيف", "لماذا", "ان", "أن", "لا", "قانون", "طريقة", "النظام"]);
+    const qWords = query
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 3 && !stopWords.has(w));
+    return similar.filter((exp) => {
+      if (qWords.length === 0) return false;
+      const pastQ = (exp.question || "").toLowerCase();
+      return qWords.filter((w) => pastQ.includes(w)).length >= Math.min(2, qWords.length);
+    });
   }
 
   // ---------------------------------------------------------------------------
   // Tier 3: Axiomatic Semantic Core (Immutable Ground Truths)
   // ---------------------------------------------------------------------------
   searchAxioms(query: string, maxResults = 3): AxiomItem[] {
-    const qVec = hashEmbed(query, 64);
-    const scored = this.axiomaticCore.map((ax) => {
-      const axVec = hashEmbed(`${ax.name} ${ax.statement} ${ax.domain}`, 64);
-      return { ax, sim: cosine(qVec, axVec) };
-    });
+    const qLower = query.toLowerCase();
+    const axiomKeywords: Record<string, string[]> = {
+      ax_ideal_gas: ["غاز", "مثالي", "ضغط", "حجم", "حرارة", "بويل", "غاي", "لوساك", "ideal gas", "pv=nrt", "thermodynamics"],
+      ax_newton_second: ["نيوتن", "قوة", "كتلة", "تسارع", "سقوط", "شاقولي", "جاذبية", "حركة", "newton", "force", "acceleration", "free fall", "f=ma"],
+      ax_energy_conservation: ["حفظ الطاقة", "طاقة حركية", "طاقة كامنة", "شغل", "ديناميكا حرارية", "conservation of energy"],
+      ax_ohm_law: ["أوم", "اوم", "جهد", "تيار", "مقاومة", "كهرباء", "دارة", "ohm", "voltage", "current", "resistance"],
+      ax_pythagoras: ["فيثاغورس", "مثلث", "وتر", "هندسة", "زاوية قائمة", "pythagoras", "triangle", "hypotenuse"],
+      ax_omega_creator: ["مطور", "برمج", "صنع", "اخترع", "انشأ", "أنشأ", "مؤسس", "صاحب", "بنى", "ماسينيسا", "فايد", "massinissa", "faid", "creator", "developer"],
+    };
 
-    return scored
-      .filter((s) => s.sim > 0.15)
-      .sort((a, b) => b.sim - a.sim)
-      .slice(0, maxResults)
-      .map((s) => s.ax);
+    return this.axiomaticCore
+      .filter((ax) => {
+        const kws = axiomKeywords[ax.id];
+        if (kws) {
+          return kws.some((kw) => qLower.includes(kw));
+        }
+        const words = ax.name
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((w) => w.length > 3 && w !== "قانون" && w !== "مبرهنة");
+        return words.some((w) => qLower.includes(w));
+      })
+      .slice(0, maxResults);
   }
 
   addAxiom(axiom: Omit<AxiomItem, "id" | "verifiedAt">): AxiomItem {

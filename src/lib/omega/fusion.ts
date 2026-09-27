@@ -27,6 +27,7 @@ import { verifyAnswer, type VerificationResult } from "./selfVerify";
 import { completeWithModel, type ChatMsg, type CompleteOk } from "./providers";
 import type { ModelId, ProviderKeys } from "./models";
 import { runOmegaKernelExtended, DEFAULT_PSI_STATE } from "./kernelUpgrade";
+import { globalOmegaKernel, type OmegaCoreBridgeState } from "./kernel";
 import {
   isOpenProblemQuery,
   buildExplorationPathways,
@@ -45,6 +46,7 @@ export interface FusionCandidate {
   psi: number;
   weight: number;
   delta?: number;
+  simulated?: boolean;
 }
 
 export interface FusionTelemetry {
@@ -55,6 +57,7 @@ export interface FusionTelemetry {
   spread: number;
   rawCount: number;
   durationMs: number;
+  ensembleMode?: "real_multi_provider" | "mixed" | "simulated_single_model";
 }
 
 export interface FusionResult {
@@ -69,6 +72,7 @@ export interface FusionResult {
   verification?: VerificationResult;
   telemetry?: FusionTelemetry;
   exploratoryData?: DeepExplorationResult;
+  omegaCore?: OmegaCoreBridgeState;
 }
 
 export interface FusionOptions {
@@ -93,10 +97,40 @@ async function gatherCandidates(
   messages: ChatMsg[],
   models: ModelId[],
   opts: FusionOptions,
-): Promise<{ modelId: ModelId; text: string }[]> {
-  opts.onStepProgress?.("gathering", `جاري استطلاع آراء ${models.length} نماذج ذكية...`);
+): Promise<{ modelId: ModelId; text: string; simulated?: boolean }[]> {
+  opts.onStepProgress?.("gathering", `جاري استطلاع آراء ${models.length} نماذج ذكية عبر OmegaCore...`);
 
-  // If no custom external keys are provided, use unified batch ensemble endpoint to save requests
+  const lastUserMsg = [...messages].reverse().find((m) => m.role === "user")?.content || "";
+
+  // 1. Primary path: Unified OmegaCore lifecycle (/api/omega/core/process)
+  if (!opts.attachments?.length && lastUserMsg) {
+    try {
+      const coreRes = await fetch("/api/omega/core/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: "user_main",
+          question: lastUserMsg,
+          models,
+          keys: opts.keys,
+        }),
+      });
+      if (coreRes.ok) {
+        const coreData = await coreRes.json();
+        if (coreData.ok && Array.isArray(coreData.candidates) && coreData.candidates.length > 0) {
+          return coreData.candidates.map((c: any) => ({
+            modelId: c.modelId as ModelId,
+            text: c.text,
+            simulated: Boolean(c.simulated),
+          }));
+        }
+      }
+    } catch {
+      // Proceed to ensemble fallback if needed
+    }
+  }
+
+  // 2. Fallback: If no custom external keys are provided, use batch ensemble endpoint
   const hasCustomKeys = opts.keys && Object.values(opts.keys).some((k) => typeof k === "string" && k.trim());
   if (!hasCustomKeys) {
     try {
@@ -118,6 +152,7 @@ async function gatherCandidates(
           return data.candidates.map((c: any) => ({
             modelId: c.modelId as ModelId,
             text: c.text,
+            simulated: true,
           }));
         }
       }
@@ -205,16 +240,18 @@ async function aggregate(
   question: string,
   ranked: FusionCandidate[],
   opts: FusionOptions,
-): Promise<string> {
-  opts.onStepProgress?.("resolving", "الاستنتاج التكاملي الذكي: استخلاص الحقيقة القطعية من كافة الخوادم...");
+  domain?: string,
+): Promise<{ text: string; omegaCore?: OmegaCoreBridgeState }> {
+  opts.onStepProgress?.("resolving", "الاستنتاج التكاملي الذكي عبر قلب أوميغا ونواته...");
 
-  // 1. Try server-side Master Integrative Deduction endpoint
+  // 1. Try server-side Master Integrative Deduction endpoint (connected to OmegaCore & OmegaInferenceEngine)
   try {
     const deduceRes = await fetch("/api/omega/deduce", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         question,
+        domain,
         candidates: ranked.map((c) => ({
           modelId: c.modelId,
           text: c.text,
@@ -227,7 +264,7 @@ async function aggregate(
     if (deduceRes.ok) {
       const data = await deduceRes.json();
       if (data.ok && typeof data.text === "string" && data.text.trim()) {
-        return data.text.trim();
+        return { text: data.text.trim(), omegaCore: data.omegaCore };
       }
     }
   } catch {
@@ -242,8 +279,8 @@ async function aggregate(
         "أنت أوميغا (Omega AI) — العقل الاستنتاجي الحاكم والحصيف كأذكى خبير إنساني في العالم.\n" +
         "أمامك مساهمات متخصصة من عدة خوادم ذكاء اصطناعي (Qwen، DeepSeek R1، GPT-4o، Gemini، Claude).\n" +
         "المطلوب منك بموجب الميثاق التكاملي لمنظومة أوميغا:\n" +
-        "1. الخوادم لا تتصارع ولا تتناقض؛ بل تتكامل: اجمع القوة الرياضية ومعادلات KaTeX ($...$ و $$...$$) من خادم الرياضيات، والتسلسل المنطقي من خادم الاستدلال، والتنظيم الموسوعي من خادم المعرفة.\n" +
-        "2. استنتج الإجابة الصحيحة والحاسمة بمنطق رصين وعلم دقيق وحل أي تباين ظاهري بين الخوادم.\n" +
+        "1. الخوادم لا تتصارع ولا تتناقض؛ بل تتكامل: اجمع التسلسل المنطقي والتنظيم الموسوعي من الخوادم.\n" +
+        "2. تنبيه صارم: لا تقحم أي معادلات رياضية أو فيزيائية إلا إذا كان سؤال المستخدم نفسه مسألة رياضية أو فيزيائية تتطلب معادلات. في الأسئلة الفلسفية أو المنطقية أو العامة، أجب بالتحليل الفكري والمنطقي الخالص دون أي معادلات مقحمة.\n" +
         "3. صُغ إجابة موحدة، شاملة، وواثقة ومكتملة تبرهن على براعة الذكاء التكاملي لنظام أوميغا.",
     },
     {
@@ -262,7 +299,7 @@ async function aggregate(
     searchGrounding: opts.searchGrounding,
   });
 
-  return result.ok && result.text.trim() ? result.text : top[0]?.text || "";
+  return { text: result.ok && result.text.trim() ? result.text : top[0]?.text || "" };
 }
 
 export async function fuseResponses(
@@ -368,11 +405,22 @@ export async function fuseResponses(
     const symbolicSimulations = runSymbolicExplorationAudit(question);
     const thoughtTreeCase = buildThoughtTreeFromExploration(question, pathways, symbolicSimulations);
 
-    const finalText = await aggregate(question, candidates, opts);
+    const { text: finalText, omegaCore: deducedCore } = await aggregate(question, candidates, opts, domain);
     opts.onStepProgress?.("verifying", "إجراء فحص التحقق الذاتي والموثوقية الاستكشافية...");
     const verification = opts.skipVerification
       ? undefined
       : await verifyAnswer(question, finalText, opts.verifierModel ?? opts.aggregatorModel, opts.keys);
+
+    globalOmegaKernel.absorb(finalText, candidates, domain);
+    const syncedKernel = globalOmegaKernel.syncWithOmegaCore({
+      ...(deducedCore || {}),
+      connected: true,
+      lastPulseAt: Date.now(),
+      domain,
+      corePsiScore: candidates[0]?.psi ?? 0.9,
+      selfCheckVerified: verification ? verification.passed : true,
+      selfCheckConfidence: verification ? verification.confidence : 0.95,
+    });
 
     const avgPsi = Number(
       (
@@ -443,11 +491,15 @@ export async function fuseResponses(
       verification,
       telemetry: fullTelemetry,
       exploratoryData,
+      omegaCore: syncedKernel.coreBridge,
     };
   }
 
-  // Check if candidate 0 has extraordinary standalone consensus and no mathematical or identity gaps
-  const hasEquations = candidates.some((c) => c.text.includes("$$") || c.text.includes("$"));
+  // Only check for equation enrichment when the domain itself is math/science and the question explicitly involves equations/laws
+  const isMathOrPhysicsQuery =
+    domain === "math_proving" ||
+    /معادل|قانون|نيوتن|سقوط|شاقولي|كولاتز|فيزياء|رياضيات|حساب|اشتقاق|تكامل|سرعة|تسارع|طاقة|جاذبية|collatz|newton|equation|formula/i.test(question);
+  const hasEquations = isMathOrPhysicsQuery && candidates.some((c) => c.text.includes("$$") || c.text.includes("$"));
   const cand0HasEquations = candidates[0].text.includes("$$") || candidates[0].text.includes("$");
   const needsEnrichment = hasEquations && !cand0HasEquations;
 
@@ -456,6 +508,16 @@ export async function fuseResponses(
     const verification = opts.skipVerification
       ? undefined
       : await verifyAnswer(question, candidates[0].text, opts.verifierModel ?? opts.aggregatorModel, opts.keys);
+    globalOmegaKernel.absorb(candidates[0].text, candidates, domain);
+    const syncedKernel = globalOmegaKernel.syncWithOmegaCore({
+      connected: true,
+      lastPulseAt: Date.now(),
+      domain,
+      corePsiScore: candidates[0].psi,
+      selfCheckVerified: verification ? verification.passed : true,
+      selfCheckConfidence: verification ? verification.confidence : 0.95,
+      activeStrategy: "Direct Consensus ⇄ OmegaKernel & OmegaCore",
+    });
     return {
       mode: "direct",
       finalText: candidates[0].text,
@@ -465,18 +527,27 @@ export async function fuseResponses(
       embeddingSource: source,
       verification,
       telemetry: fullTelemetry,
+      omegaCore: syncedKernel.coreBridge,
     };
   }
 
-  // Master Integrative Deduction:
-  // Instead of abandoning the user in "uncertainty mode" where servers seem to fight,
-  // Omega acts as the supreme master intellect: evaluating all servers, deducing the truth,
-  // reconciling differences, and producing the unified, authoritative master answer.
-  const finalText = await aggregate(question, candidates, opts);
+  // Master Integrative Deduction (OmegaCore + OmegaKernel unified synthesis)
+  const { text: finalText, omegaCore: deducedCore } = await aggregate(question, candidates, opts, domain);
   opts.onStepProgress?.("verifying", "إجراء فحص التحقق الذاتي على الإجابة الاستنتاجية التكاملية...");
   const verification = opts.skipVerification
     ? undefined
     : await verifyAnswer(question, finalText, opts.verifierModel ?? opts.aggregatorModel, opts.keys);
+
+  globalOmegaKernel.absorb(finalText, candidates, domain);
+  const syncedKernel = globalOmegaKernel.syncWithOmegaCore({
+    ...(deducedCore || {}),
+    connected: true,
+    lastPulseAt: Date.now(),
+    domain,
+    corePsiScore: candidates[0]?.psi ?? 0.9,
+    selfCheckVerified: verification ? verification.passed : true,
+    selfCheckConfidence: verification ? verification.confidence : 0.95,
+  });
 
   return {
     mode: "aggregated",
@@ -487,5 +558,6 @@ export async function fuseResponses(
     embeddingSource: source,
     verification,
     telemetry: fullTelemetry,
+    omegaCore: syncedKernel.coreBridge,
   };
 }

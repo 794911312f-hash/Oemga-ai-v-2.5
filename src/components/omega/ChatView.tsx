@@ -741,10 +741,11 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
     if ((!text && currentAttachments.length === 0) || isProcessing) return;
 
-    // Check if user specifically requested a scientific educational video pipeline (Newton, Einstein, etc.)
+    // Check if user specifically requested a scientific educational video pipeline (only when video/simulation/pipeline is explicitly requested)
     const isFreeFallPrompt =
-      /سقوط.*شاقولي|شاقولي.*سقوط|السقوط.*الحر|سقوط.*حر|free\s*fall|freefall/i.test(text) ||
-      (text.includes("نيوتن") && (text.includes("سقوط") || text.includes("شاقولي") || text.includes("جاذبية") || text.includes("تفاحة")));
+      /\b(فيديو|محاكاة|خط إنتاج|خط انتاج|pipeline|مشهد|متحرك|video)\b/i.test(text) &&
+      (/سقوط.*شاقولي|شاقولي.*سقوط|السقوط.*الحر|سقوط.*حر|free\s*fall|freefall/i.test(text) ||
+        (text.includes("نيوتن") && (text.includes("سقوط") || text.includes("شاقولي") || text.includes("جاذبية") || text.includes("تفاحة"))));
 
     const isPipelineDirectPrompt =
       isFreeFallPrompt ||
@@ -1699,6 +1700,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
                               </strong>
                             </span>
                           )}
+                          <button
+                            type="button"
+                            onClick={() => onOpenKernelWithResult && onOpenKernelWithResult(msg.fusionResult!)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60 transition-colors cursor-pointer"
+                            title="انقر لفحص جسر الاتصال الحي بين قلب أوميغا (OmegaCore) ونواة أوميغا (OmegaKernel)"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                            <span>قلب أوميغا ⇄ النواة: متصل (Gen {msg.fusionResult.omegaCore?.generation ?? 1})</span>
+                          </button>
                         </div>
                       )}
                       <MathRenderer content={msg.content} />

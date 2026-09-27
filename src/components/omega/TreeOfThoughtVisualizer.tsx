@@ -85,7 +85,7 @@ export function createThoughtTreeFromFusion(question: string, result: any): Prob
       title: `مسار النموذج: ${cand.modelName || cand.modelId || `نموذج ${idx + 1}`}`,
       domain: domain,
       hypothesis: cand.text ? cand.text.slice(0, 160) + (cand.text.length > 160 ? "..." : "") : "فرضية الاستدلال",
-      equations: equations.length > 0 ? equations : ["E = mc^2", "\\Psi = \\sum w_i \\cdot s_i"],
+      equations: equations,
       dimensionalCheck: psiScore > 0.65 ? "pass" : psiScore > 0.45 ? "warning" : "fail",
       confidenceScore: confidence,
       verdict: isChosen ? "accepted" : psiScore < 0.5 ? "pruned" : "alternative",

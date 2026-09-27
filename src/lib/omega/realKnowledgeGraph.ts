@@ -214,23 +214,62 @@ export class RealKnowledgeGraph {
   }
 
   /**
-   * Discovers deductive chains answering user inquiry
+   * Discovers deductive chains answering user inquiry ONLY when genuinely related to the graph nodes
    */
   inferMultiHop(inquiry: string): DeductionPath[] {
-    const qVec = hashEmbed(inquiry, 64);
-    const candidateNodes = [...this.nodes.values()]
-      .map((n) => ({ node: n, sim: cosine(qVec, n.embedding) }))
-      .filter((s) => s.sim > 0.18)
-      .sort((a, b) => b.sim - a.sim)
-      .slice(0, 4)
-      .map((s) => s.node);
+    const qLower = inquiry.toLowerCase();
+    // Only match nodes whose specific domain keywords appear in the user inquiry
+    const nodeKeywords: Record<string, string[]> = {
+      ideal_gas: ["غاز", "مثالي", "ideal gas", "pv=nrt", "ديناميكا حرارية", "حرارية"],
+      pressure: ["ضغط", "باسكال", "pressure", "pascal"],
+      volume: ["حجم", "متر مكعب", "volume"],
+      temperature: ["حرارة", "كلفن", "temperature", "kelvin", "تسخين", "تبريد"],
+      kinetic_energy: ["طاقة حركية", "جزيئات", "kinetic energy"],
+      boyle_law: ["بويل", "boyle"],
+      gay_lussac: ["غاي", "لوساك", "gay-lussac", "gay lussac"],
+      newton_2: ["نيوتن", "قوة", "تسارع", "سقوط", "جاذبية", "newton", "force", "acceleration", "free fall"],
+      force: ["قوة", "نيوتن", "force"],
+      mass: ["كتلة", "كيلوغرام", "mass", "قصور"],
+      acceleration: ["تسارع", "عجلة", "سقوط", "acceleration", "جاذبية"],
+      inertia: ["قصور ذاتي", "عطالة", "inertia"],
+    };
+
+    const matchedIds = Object.entries(nodeKeywords)
+      .filter(([, kwList]) => kwList.some((kw) => qLower.includes(kw)))
+      .map(([id]) => id);
+
+    // If fewer than 1 domain node matched by keyword, check if user added custom nodes matching keywords
+    const candidateNodes = [...this.nodes.values()].filter((n) => {
+      if (matchedIds.includes(n.id)) return true;
+      const labelWords = n.label
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\s]/gu, " ")
+        .split(/\s+/)
+        .filter((w) => w.length > 3 && !["قانون", "طاقة", "نظام", "علاقة"].includes(w));
+      return labelWords.length > 0 && labelWords.some((w) => qLower.includes(w));
+    });
+
+    if (candidateNodes.length === 0) return [];
+
+    // Also include immediate neighbors of matched nodes so multi-hop within the same domain works
+    const expandedIds = new Set<string>(candidateNodes.map((n) => n.id));
+    for (const n of candidateNodes) {
+      const neighbors = this.adjacency.get(n.id) || [];
+      for (const nb of neighbors) {
+        expandedIds.add(nb.targetId);
+      }
+    }
+    const finalCandidates = [...expandedIds]
+      .map((id) => this.nodes.get(id))
+      .filter((n): n is GraphNode => !!n)
+      .slice(0, 5);
 
     const paths: DeductionPath[] = [];
 
-    for (let i = 0; i < candidateNodes.length; i++) {
-      for (let j = 0; j < candidateNodes.length; j++) {
+    for (let i = 0; i < finalCandidates.length; i++) {
+      for (let j = 0; j < finalCandidates.length; j++) {
         if (i !== j) {
-          const path = this.findDeductionPath(candidateNodes[i].id, candidateNodes[j].id, 3);
+          const path = this.findDeductionPath(finalCandidates[i].id, finalCandidates[j].id, 3);
           if (path) paths.push(path);
         }
       }

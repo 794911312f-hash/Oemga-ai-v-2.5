@@ -130,16 +130,30 @@ export async function getRelevantExperienceContext(
   const embedding = hashEmbed(question, 64);
   const similar = await findSimilarExperiences(userId, embedding, limitCount);
 
-  if (similar.length === 0) return "";
+  const stopWords = new Set(["هل", "ما", "من", "في", "على", "إلى", "عن", "مع", "هذا", "هذه", "كيف", "لماذا", "ان", "أن", "لا", "قانون", "طريقة", "النظام", "سؤال"]);
+  const queryWords = question
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 3 && !stopWords.has(w));
+
+  const relevant = similar.filter((s) => {
+    if (queryWords.length === 0) return false;
+    const qLower = (s.question || "").toLowerCase();
+    const matched = queryWords.filter((w) => qLower.includes(w));
+    return matched.length >= Math.min(2, queryWords.length);
+  });
+
+  if (relevant.length === 0) return "";
 
   return (
-    "### خبرات سابقة مشابهة من نواة أوميغا (Firestore RAG):\n" +
-    similar
+    "### خبرات سابقة مطابقة للموضوع من نواة أوميغا:\n" +
+    relevant
       .map(
         (s, i) =>
           `${i + 1}. سؤال: ${s.question.slice(0, 120)}...\n` +
           `   إجابة سابقة (ψ=${s.topPsi.toFixed(2)}, تحقق=${s.verificationPassed ? "نجح" : "فشل"}):\n` +
-          `   ${s.finalAnswer.slice(0, 300)}...`
+          `   ${s.finalAnswer.slice(0, 260)}...`
       )
       .join("\n\n")
   );
