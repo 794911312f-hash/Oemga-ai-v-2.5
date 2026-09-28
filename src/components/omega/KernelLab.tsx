@@ -28,6 +28,7 @@ export const KernelLab: React.FC<KernelLabProps> = ({ initialResult }) => {
   const [gramMatrix, setGramMatrix] = useState<number[][]>([]);
   const [isPulsingCore, setIsPulsingCore] = useState(false);
   const [corePulseLog, setCorePulseLog] = useState<string | null>(null);
+  const [coreTraceData, setCoreTraceData] = useState<any | null>(null);
 
   useEffect(() => {
     const unsub = globalOmegaKernel.subscribe((state) => {
@@ -50,8 +51,9 @@ export const KernelLab: React.FC<KernelLabProps> = ({ initialResult }) => {
         }),
       });
       const data = await res.json();
-      if (data.ok && data.result) {
-        const r = data.result;
+      const r = data.result || (data.ok ? data : null);
+      if (r && r.answer) {
+        setCoreTraceData(r);
         const synced = globalOmegaKernel.syncWithOmegaCore({
           connected: true,
           lastPulseAt: Date.now(),
@@ -67,11 +69,9 @@ export const KernelLab: React.FC<KernelLabProps> = ({ initialResult }) => {
         });
         setKernelState(synced);
         setCorePulseLog(
-          `✅ تم التحقق بنجاح: قلب أوميغا (OmegaCore) ونواة أوميغا (OmegaKernel) متصلان ويعملان بتناغم كامل (Ψ = ${(
-            (r.psi ?? 0.94) * 100
-          ).toFixed(1)}% | الجيل ${r.inferenceResult?.generation ?? 1} | العقد المعرفية: ${
-            r.inferenceResult?.matrixSnapshot?.knowledgeNodes ?? 14
-          }).`
+          `✅ تم التحقق بنجاح: قلب أوميغا (OmegaCore) ونواة أوميغا (OmegaKernel) متصلان ويعملان بتناغم كامل | الوضع: ${r.ensembleMode} | التحقق الذاتي: ${
+            r.verified === null ? "غير محسوم (null)" : r.verified ? "موثق (true)" : "مرفوض (false)"
+          } | (Ψ = ${((r.psi ?? 0.94) * 100).toFixed(1)}% | الجيل ${r.inferenceResult?.generation ?? 1}).`
         );
       } else {
         setCorePulseLog("⚠️ تم تحديث النواة محلياً مع استمرار جسر الاتصال.");
@@ -240,6 +240,66 @@ export const KernelLab: React.FC<KernelLabProps> = ({ initialResult }) => {
         {corePulseLog && (
           <div className="p-2.5 rounded-xl bg-emerald-950/50 border border-emerald-500/30 text-xs text-emerald-200 font-medium">
             {corePulseLog}
+          </div>
+        )}
+
+        {coreTraceData && (
+          <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+              <div className="font-bold text-slate-200">
+                سجل دورة حياة الطلب الموحدة (OmegaCore Lifecycle Trace)
+              </div>
+              <div className="flex items-center gap-2 font-mono text-[11px]">
+                <span className="px-2 py-0.5 rounded bg-purple-950/70 border border-purple-500/40 text-purple-300">
+                  الوضع: {coreTraceData.ensembleMode}
+                </span>
+                <span className="px-2 py-0.5 rounded bg-cyan-950/70 border border-cyan-500/40 text-cyan-300">
+                  verified: {coreTraceData.verified === null ? "null" : String(coreTraceData.verified)}
+                </span>
+              </div>
+            </div>
+
+            {Array.isArray(coreTraceData.candidates) && coreTraceData.candidates.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {coreTraceData.candidates.map((c: any, idx: number) => (
+                  <div
+                    key={idx}
+                    className="p-2 rounded-lg bg-slate-900/90 border border-slate-800 flex flex-col justify-between gap-1"
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="font-mono font-bold text-slate-200 text-[11px]">{c.modelId}</span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                          c.simulated
+                            ? "bg-amber-950/70 text-amber-300 border border-amber-500/40"
+                            : "bg-emerald-950/70 text-emerald-300 border border-emerald-500/40"
+                        }`}
+                      >
+                        {c.simulated ? "simulated: true" : "simulated: false (حقيقي)"}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono">
+                      Ψ = {typeof c.psi === "number" ? c.psi.toFixed(3) : "—"} | وزن ={" "}
+                      {typeof c.weight === "number" ? c.weight.toFixed(2) : "—"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {Array.isArray(coreTraceData.trace) && coreTraceData.trace.length > 0 && (
+              <div className="space-y-1 max-h-36 overflow-y-auto pr-1 font-mono text-[11px]">
+                {coreTraceData.trace.map((step: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between text-slate-300 bg-slate-900/50 px-2 py-1 rounded">
+                    <div>
+                      <span className="text-emerald-400 font-bold">[{step.stage}]</span>{" "}
+                      <span>{step.detail}</span>
+                    </div>
+                    <span className="text-slate-500 text-[10px]">+{step.atMs}ms</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

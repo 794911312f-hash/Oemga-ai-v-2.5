@@ -111,6 +111,7 @@ async function gatherCandidates(
         body: JSON.stringify({
           userId: "user_main",
           question: lastUserMsg,
+          history: messages.slice(0, -1),
           models,
           keys: opts.keys,
         }),
@@ -174,12 +175,12 @@ async function gatherCandidates(
     )
   );
 
-  const ok: { modelId: ModelId; text: string }[] = results
+  const ok: { modelId: ModelId; text: string; simulated?: boolean }[] = results
     .filter(
       (r): r is PromiseFulfilledResult<{ id: ModelId; res: any }> =>
         r.status === "fulfilled" && !!r.value.res.ok && Boolean(r.value.res.text?.trim())
     )
-    .map((r) => ({ modelId: r.value.id, text: r.value.res.text.trim() }));
+    .map((r) => ({ modelId: r.value.id, text: r.value.res.text.trim(), simulated: false }));
 
   return ok;
 }
@@ -315,12 +316,16 @@ export async function fuseResponses(
 
   let raw = await gatherCandidates(messages, models, opts);
   if (raw.length === 0) {
-    const isArabic = /[\u0600-\u06FF]/.test(question);
-    const defaultText = isArabic
-      ? `تمت معالجة السؤال: «${question}» عبر نواة أوميغا متعددة النماذج بنجاح مع تحقيق الاتساق المعرفي الكامل.`
-      : `Processed question: "${question}" through the Omega Multi-Model Kernel with verified consensus invariants.`;
-    raw = models.map((m) => ({ modelId: m, text: defaultText }));
+    throw new Error("فشل كل المزودين ولم يُنتج أي مرشح إجابة");
   }
+
+  const realCount = raw.filter((r) => !r.simulated).length;
+  const computedEnsembleMode: "real_multi_provider" | "mixed" | "simulated_single_model" =
+    realCount === raw.length
+      ? "real_multi_provider"
+      : realCount > 0
+      ? "mixed"
+      : "simulated_single_model";
 
   if (raw.length === 1) {
     opts.onStepProgress?.("verifying", "إجراء فحص التحقق الذاتي الأحادي...");
@@ -344,6 +349,7 @@ export async function fuseResponses(
         spread: 0,
         rawCount: 1,
         durationMs: Date.now() - startTime,
+        ensembleMode: computedEnsembleMode,
       },
     };
   }
@@ -394,6 +400,7 @@ export async function fuseResponses(
     spread: Number(spread.toFixed(4)),
     rawCount: raw.length,
     durationMs: Date.now() - startTime,
+    ensembleMode: computedEnsembleMode,
   };
 
   // Check if exploratory reasoning mode is triggered

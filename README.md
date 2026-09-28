@@ -1,6 +1,3 @@
-Here is the complete, updated README.md with the Mathematical Foundation section fully integrated. I placed it right after the Architecture section, since that's the natural flow: vision → features → architecture → math → setup. I also adjusted LaTeX delimiters to $$ ... $$ for GitHub compatibility.
-
-```markdown
 # 🧠 Omega AI — Cognitive Consensus Engine
 
 > **A self-hosted, multi-model reasoning system built on spectral consensus, dynamic state evolution, and an interactive 3D cognitive avatar.**
@@ -47,18 +44,52 @@ The system is designed first and foremost as a **personal reasoning tool**: a pr
 ### 🧩 Modular Reasoning Units
 | Module | Purpose |
 |---|---|
+| `omegaCore.ts` | Unified request lifecycle orchestrator (`prepare` → `inference` → `verify` → `commit`) |
 | `fusion.ts` | Multi-model consensus and synthesis |
-| `kernel.ts` | Spectral state evolution |
+| `kernel.ts` | Spectral state evolution & `OmegaCore ⇄ OmegaKernel` live bridge |
+| `inferenceEngine.ts` | Stateful matrices (Memory, Confidence, Experience, Agreement, Goals, Knowledge Graph) |
 | `intelligentRouter.ts` | Domain-aware model routing |
 | `domainRouting.ts` | Per-domain model selection |
 | `adversarialDebate.ts` | Structured debate between models |
 | `selfVerify.ts` | Post-selection self-verification |
-| `hierarchicalMemory.ts` | Multi-level conversation memory |
+| `hierarchicalMemory.ts` | 3-tier working, episodic, and axiomatic memory |
 | `vectorStore.ts` | Vector retrieval for RAG |
-| `symbolicEngine.ts` | Symbolic math solving |
+| `symbolicEngine.ts` | Symbolic math solving (Nerdamer / Math.js / SymPy CAS) |
 | `mctsTree.ts` | Monte Carlo tree search reasoning |
-| `autonomousAgent.ts` | Self-directed task execution |
+| `autonomousAgent.ts` | Self-directed task execution & self-correction |
+| `providerManager.ts` | Multi-provider media router, health telemetry & automatic failover |
 | `mediaOrchestrator.ts` | Image, audio, and video generation |
+
+---
+
+## 🌐 Integrated Services & Multi-Provider Architecture (الخدمات المتكاملة)
+
+Omega AI decouples reasoning and media synthesis from any single vendor by routing requests through unified service layers with automatic failover (`ProviderManager`):
+
+### 1. 🧠 Language & Reasoning Services (LLM Consensus Pool)
+- **Google Gemini (`@google/genai`)**: High-speed reasoning, multimodal document/image analysis, and search grounding.
+- **OpenRouter Unified Gateway**: Multi-provider access to **Alibaba Qwen 2.5 72B**, **DeepSeek R1**, **Meta Llama 3.3 70B**, **Anthropic Claude 3.5 Sonnet**, **OpenAI GPT-4o**, and **xAI Grok**.
+- **Together AI & Groq**: Low-latency open-weights inference.
+- **Local Hardware Bridge**: Direct zero-cost local execution via **Ollama** (`http://localhost:11434`) and **vLLM** (`http://localhost:8000`).
+
+### 2. 🎨 Media Router & Generative Visual Services (`ProviderManager`)
+Omega routes image, video, and audio tasks across prioritized providers based on latency, success rate, cost, and quality, failing over automatically:
+- **Hugging Face Inference Providers**: Unified API gateway for FLUX.1, Stable Diffusion, LTX-Video, and Whisper STT.
+- **fal.ai**: Ultra-fast generation for **FLUX.1 Pro/Schnell**, **Kling Video**, **Wan 2.2**, **Stable Video**, and **Vidu**.
+- **Replicate**: Open-source model hub for **FLUX**, **Wan 2.1**, **LivePortrait**, **MuseTalk**, and **SadTalker**.
+- **Together AI**: Unified image generation (`FLUX.1-schnell-Free`).
+- **Local ComfyUI**: Self-hosted node-based image/video/avatar pipelines (`http://localhost:8188`).
+
+### 3. 🎭 Hybrid Avatar & Voice Services (Professor Omega)
+- **Tier 1 — Lightweight Real-Time Engine (Always Active)**: Browser-native **CSS + HTML5 Canvas + Web Audio API** frequency analyzer for zero-latency lip-sync, eye tracking, blinking, breathing, and head tilt on any device.
+- **Tier 2 — Pro Neural Lip-Sync (Cloud API / Local GPU)**: Automatic upgrade to **LivePortrait**, **MuseTalk**, or **SadTalker** when a cloud API key (`fal.ai` / `Replicate`) or local GPU (`ComfyUI`) is connected.
+- **Voice Synthesis & STT**: **ElevenLabs**, **OpenAI TTS**, **XTTS v2**, **Edge TTS**, and **Web Speech API** with 12+ scientific and documentary voice personas.
+
+### 4. 🔬 Scientific, Symbolic & Real-Time Grounding Services
+- **Symbolic CAS Engine (`/api/omega/symbolic`)**: Algebraic simplification, differentiation, integration, equation systems, and Collatz orbit verification via `nerdamer` and `mathjs`.
+- **OEIS & arXiv Integration (`/api/omega/oeis`)**: Live integer sequence lookup and scientific preprint retrieval for open mathematical problems.
+- **Live Weather & Global News (`/api/omega/tools/weather`, `/api/omega/tools/news`)**: Real-time meteorological telemetry (`Open-Meteo`) and verified RSS news grounding.
+- **Firebase Cloud Persistence (`firebase-admin`)**: Long-term episodic memory, self-evolving weights, and cross-session state synchronization.
 
 ### 🎨 Multimodal Studio
 - **Images** — high-quality generation from prompts.
@@ -522,30 +553,4 @@ Omega stands on the shoulders of:
 
 "Don't rent intelligence. Build it."
 
-— Omega AI
-
-```
-
----
-
-### 📝 What changed
-
-| Change | Reason |
-|---|---|
-| Added **🧮 Mathematical Foundation** section | Your contribution, fully integrated |
-| Moved **Research Direction** out of the math section | It reads better as its own top-level heading |
-| Normalized all display equations to `$$ ... $$` | GitHub Flavored Markdown renders `$$` reliably across viewers |
-| Switched inline math from `\( \)` to `$...$` | Same reason — better GitHub compatibility |
-| Used `\left( \right)` and `\|x\|` | Cleaner rendering of parentheses and norms |
-| Added `where $R$ maps...` inline sentence | Slight rephrase for readability |
-
-### 💡 Optional next steps
-
-If you want, I can now also draft:
-
-1. **`ARCHITECTURE.md`** — deep technical walkthrough of each module.
-2. **`MATH.md`** — expands the math section with proofs, derivations, and pseudocode for `fusion.ts` and `kernel.ts`.
-3. **`CONTRIBUTING.md`** and **`SECURITY.md`** — standard OSS policy files.
-4. **`LICENSE`** — full MIT text, ready to commit.
-
-Just say which one and I'll write it.
+— Omega AI (Created & Architected by **faid Massinissa**)

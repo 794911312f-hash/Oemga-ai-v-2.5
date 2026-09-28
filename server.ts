@@ -5704,9 +5704,9 @@ app.post("/api/omega/self-play/toggle", (req, res) => {
 // OmegaCore — Single Unified Request Lifecycle Endpoint
 // ============================================================
 
-app.post("/api/omega/core/process", async (req, res) => {
+app.post(["/api/omega/core/process", "/api/omega/core"], async (req, res) => {
   try {
-    const { userId = "user_main", question, domain, models } = req.body;
+    const { userId = "user_main", question, domain, models, history } = req.body;
     if (!question || typeof question !== "string") {
       return res.status(400).json({ ok: false, error: "Question is required." });
     }
@@ -5715,17 +5715,21 @@ app.post("/api/omega/core/process", async (req, res) => {
 
     const deps: OmegaCoreDeps = {
       // حقيقي أولاً: OpenRouter فعلياً لهذا الموديل تحديداً — لا تقمّص إطلاقاً هنا
-      callRealProvider: async (modelId, q) => {
+      callRealProvider: async (modelId, q, hist) => {
         if (!openrouterKey) return null;
+        const msgList = [
+          ...(Array.isArray(hist) ? hist : []),
+          { role: "user", content: q },
+        ];
         const result = await handleOpenRouterRequest(
           modelId,
-          [{ role: "user", content: q }],
+          msgList,
           0.4,
           1024,
           getOmegaSystemContext(),
           openrouterKey
         );
-        return result ? { text: result.text } : null;
+        return result && result.text ? { text: result.text } : null;
       },
 
       // ملاذ أخير موسوم بوضوح: نموذج Gemini واحد يغطي فقط النماذج التي فشلت فعلياً
@@ -5778,8 +5782,8 @@ app.post("/api/omega/core/process", async (req, res) => {
       },
     };
 
-    const result = await runOmegaCore({ userId, question, domain, models }, deps);
-    res.json({ ok: true, ...result });
+    const result = await runOmegaCore({ userId, question, domain, models, history }, deps);
+    res.json({ ok: true, ...result, result });
   } catch (err: any) {
     res.status(500).json({ ok: false, error: err?.message });
   }

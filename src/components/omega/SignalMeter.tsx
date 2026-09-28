@@ -111,6 +111,24 @@ export const SignalMeter: React.FC<SignalMeterProps> = ({
           <span className="text-xs px-2 py-0.5 rounded bg-slate-800/80 text-slate-300 border border-slate-700/50 font-mono">
             مجال: {result.domain}
           </span>
+          {result.telemetry?.ensembleMode && (
+            <span
+              className={`text-[11px] px-2 py-0.5 rounded font-mono border ${
+                result.telemetry.ensembleMode === "real_multi_provider"
+                  ? "bg-emerald-950/70 border-emerald-500/40 text-emerald-300"
+                  : result.telemetry.ensembleMode === "mixed"
+                  ? "bg-amber-950/70 border-amber-500/40 text-amber-300"
+                  : "bg-purple-950/70 border-purple-500/40 text-purple-300"
+              }`}
+              title={`وضع التجميع: ${result.telemetry.ensembleMode}`}
+            >
+              {result.telemetry.ensembleMode === "real_multi_provider"
+                ? "مزودون حقيقيون"
+                : result.telemetry.ensembleMode === "mixed"
+                ? "هجين (حقيقي + محاكاة)"
+                : "محاكاة متعددة الأدوار"}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2 text-xs">

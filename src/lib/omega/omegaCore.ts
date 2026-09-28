@@ -36,6 +36,8 @@ export interface OmegaCoreRequest {
   domain?: Domain;
   /** فرض قائمة نماذج بدل الاختيار التلقائي حسب النطاق */
   models?: ModelId[];
+  /** رسائل المحادثة السابقة (سياق) */
+  history?: Array<{ role: string; content: string }>;
 }
 
 /** مرشّح إجابة واحد، مع الإفصاح الصريح عن مصدره الحقيقي */
@@ -87,7 +89,8 @@ export interface OmegaCoreDeps {
    */
   callRealProvider: (
     modelId: ModelId,
-    question: string
+    question: string,
+    history?: Array<{ role: string; content: string }>
   ) => Promise<{ text: string } | null>;
 
   /**
@@ -174,7 +177,7 @@ export async function runOmegaCore(
   log("Inference", "محاولة استدعاء مزودين مستقلين فعلياً...");
   const realResults = await Promise.allSettled(
     targetModels.map(async (modelId) => {
-      const r = await deps.callRealProvider(modelId, request.question);
+      const r = await deps.callRealProvider(modelId, request.question, request.history);
       return { modelId, r };
     })
   );

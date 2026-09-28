@@ -15,6 +15,24 @@ import {
   type VoiceSynthesisResult,
 } from "./types";
 
+// صوت Gemini مميّز لكل شخصية عند تعذّر مزودها الأصلي (بدل الانهيار إلى صوتين فقط)
+const GEMINI_VOICE_BY_PERSONA: Record<string, string> = {
+  "doc-arabic-fusha": "Charon",
+  "professor-omega": "Algieba",
+  "newton": "Rasalgethi",
+  "einstein": "Fenrir",
+  "tesla": "Orus",
+  "ibn-alhaytham": "Iapetus",
+  "curie": "Aoede",
+  "feynman": "Puck",
+  "morgan-freeman": "Gacrux",
+  "david-attenborough": "Sadaltager",
+  "carl-sagan": "Enceladus",
+  "news-anchor-01": "Kore",
+  "storyteller-01": "Sulafat",
+  "cyber-ai-omega": "Zephyr",
+};
+
 export class VoiceManager {
   private providers: Map<VoiceProviderId, VoiceProviderAdapter> = new Map();
   private playHT: PlayHTAdapter;
@@ -174,7 +192,9 @@ export class VoiceManager {
         const effectiveVoiceId =
           providerId === requestedProvider
             ? options.voiceId || persona.voiceId
-            : this.getDefaultVoiceForProvider(providerId, category);
+            : providerId === "gemini-tts" && GEMINI_VOICE_BY_PERSONA[persona.id]
+              ? GEMINI_VOICE_BY_PERSONA[persona.id]
+              : this.getDefaultVoiceForProvider(providerId, category);
 
         const { buffer, mimeType } = await adapter.generate(cleanText, effectiveVoiceId, {
           speed: targetSpeed,

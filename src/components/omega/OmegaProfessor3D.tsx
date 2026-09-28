@@ -16,6 +16,7 @@ import {
   Activity,
   Cpu,
   UserCheck,
+  Send,
 } from "lucide-react";
 import {
   speakWithOmega,
@@ -275,6 +276,9 @@ export const OmegaProfessor3D: React.FC<OmegaProfessor3DProps> = ({
   const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const targetLookRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const recognitionRef = useRef<any>(null);
+  // مرجع لأحدث نسخة من معالج الاستعلام: يمنع مشكلة الـ stale closure في onresult
+  const voiceQueryRef = useRef<(q: string) => void>(() => {});
+  const [typedMessage, setTypedMessage] = useState("");
 
   const activeSkin =
     AVATAR_SKINS.find((s) => s.id === activeSkinId) || AVATAR_SKINS[0];
@@ -363,7 +367,7 @@ export const OmegaProfessor3D: React.FC<OmegaProfessor3DProps> = ({
           }
           setTranscript(currentText);
           if (event.results[0].isFinal) {
-            handleUserVoiceQuery(currentText);
+            voiceQueryRef.current(currentText);
             setIsListening(false);
           }
         };
@@ -424,6 +428,15 @@ export const OmegaProfessor3D: React.FC<OmegaProfessor3DProps> = ({
         );
       }, 900);
     }
+  };
+
+  voiceQueryRef.current = handleUserVoiceQuery;
+
+  const handleSendTyped = () => {
+    const q = typedMessage.trim();
+    if (!q || isProcessing) return;
+    setTypedMessage("");
+    handleUserVoiceQuery(q);
   };
 
   const applyOldManPreset = (preset: "wise" | "scholar" | "deep") => {
@@ -1777,6 +1790,33 @@ export const OmegaProfessor3D: React.FC<OmegaProfessor3DProps> = ({
             <span>{isListening ? "يستمع..." : "تحدث معه"}</span>
           </button>
         </div>
+      </div>
+
+      {/* Text input: اكتب للأفاتار مباشرة */}
+      <div className="px-3 py-2 bg-slate-950/90 border-t border-slate-800 flex items-center gap-2" dir="rtl">
+        <input
+          type="text"
+          value={typedMessage}
+          onChange={(e) => setTypedMessage(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              handleSendTyped();
+            }
+          }}
+          placeholder={`اكتب رسالة إلى ${activeSkin.nameAr}...`}
+          disabled={isProcessing}
+          className="flex-1 min-w-0 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 disabled:opacity-50"
+        />
+        <button
+          type="button"
+          onClick={handleSendTyped}
+          disabled={isProcessing || !typedMessage.trim()}
+          className="p-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white disabled:opacity-40 cursor-pointer"
+          title="إرسال"
+        >
+          <Send className="w-3.5 h-3.5" />
+        </button>
       </div>
 
       {/* Bottom Mic Transcript & Frequency Bar */}

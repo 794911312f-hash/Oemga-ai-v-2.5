@@ -1,7 +1,13 @@
 import { GoogleGenAI } from "@google/genai";
 import type { VoiceProviderAdapter } from "../types";
 
-const VALID_GEMINI_VOICES = new Set(["Puck", "Charon", "Kore", "Fenrir", "Zephyr"]);
+const VALID_GEMINI_VOICES = new Set([
+  "Zephyr", "Puck", "Charon", "Kore", "Fenrir", "Leda", "Orus", "Aoede",
+  "Callirrhoe", "Autonoe", "Enceladus", "Iapetus", "Umbriel", "Algieba",
+  "Despina", "Erinome", "Algenib", "Rasalgethi", "Laomedeia", "Achernar",
+  "Alnilam", "Schedar", "Gacrux", "Pulcherrima", "Achird", "Zubenelgenubi",
+  "Vindemiatrix", "Sadachbia", "Sadaltager", "Sulafat",
+]);
 
 /**
  * Wraps raw 24kHz 16-bit mono PCM audio bytes in a standard 44-byte RIFF WAV header

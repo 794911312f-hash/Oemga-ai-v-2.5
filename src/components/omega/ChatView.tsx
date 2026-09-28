@@ -305,6 +305,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [selectedPersonaId, setSelectedPersonaId] = useState<string>("doc-arabic-fusha");
   const [speedMultiplier, setSpeedMultiplier] = useState<number>(1.0);
   const [autoSpeakResponses, setAutoSpeakResponses] = useState<boolean>(false);
+  // عند التخاطب مع الأفاتار (صوتاً أو كتابة) يجب أن يُنطق الرد دائماً
+  const forceSpeakNextRef = useRef<boolean>(false);
   const [isVoiceActive, setIsVoiceActive] = useState<boolean>(false);
   const [currentSpeakingMessageId, setCurrentSpeakingMessageId] = useState<string | null>(null);
   const [isVoiceDropdownOpen, setIsVoiceDropdownOpen] = useState<boolean>(false);
@@ -913,8 +915,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
     // Check if voice synthesis is explicitly requested or mentioned in the prompt
     const isVoiceExplicitQuery =
+      forceSpeakNextRef.current ||
       /(اضف برامج الاصوات|برامج الاصوات|اصوات العلماء|اصوات المشاهير|اصوات الافلام الوثائيقية|اصوات الافلام الوثائقية|القدرة على الكلام|تكلم يا اوميغا|تحدث يا اوميغا|تكلم يا أوميغا|تحدث يا أوميغا|تكلم بصوت|تحدث بصوت|اقرأ بصوت|نطق بصوت|شغل صوت|voice programs|speak with omega|تحدث معي|تكلم معي|صوتك|تكلم)/i.test(text);
 
+    forceSpeakNextRef.current = false;
     let personaForThis = selectedPersonaId;
     if (/نيوتن|newton/i.test(text)) personaForThis = "newton";
     else if (/أينشتاين|اينشتاين|einstein/i.test(text)) personaForThis = "einstein";
@@ -1909,9 +1913,22 @@ export const ChatView: React.FC<ChatViewProps> = ({
                               className="p-3 rounded-xl border border-slate-800 bg-slate-900/50 space-y-1.5"
                             >
                               <div className="flex items-center justify-between font-mono text-[11px] text-slate-300">
-                                <span className="font-bold text-cyan-400">
-                                  {cand.modelId}
-                                </span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-cyan-400">
+                                    {cand.modelId}
+                                  </span>
+                                  {typeof cand.simulated === "boolean" && (
+                                    <span
+                                      className={`px-1.5 py-0.5 rounded text-[10px] border ${
+                                        cand.simulated
+                                          ? "bg-amber-950/60 border-amber-500/30 text-amber-300"
+                                          : "bg-emerald-950/60 border-emerald-500/30 text-emerald-300"
+                                      }`}
+                                    >
+                                      {cand.simulated ? "مُحاكى (simulated)" : "حقيقي (real)"}
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="flex items-center gap-2">
                                   <span className="text-purple-300">
                                     معامل التوافق Ψ: {cand.psi.toFixed(3)}
@@ -2368,6 +2385,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
           isFloating={isProfessorFloating}
           onCloseFloating={() => setShowProfessor3D(false)}
           onSendMessage={(txt) => {
+            forceSpeakNextRef.current = true;
             setInput(txt);
             handleSend(txt);
           }}
