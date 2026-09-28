@@ -11,6 +11,7 @@ import "nerdamer/Solve.js";
 import "nerdamer/Extra.js";
 import { create, all } from "mathjs";
 import { VoiceManager } from "./src/lib/omega/voice/voiceManager";
+import { omegaMemory } from "./src/lib/omega/vectorMemory";
 
 const nerdamer: any = _nerdamer;
 let mathInstance: any = null;
@@ -1297,6 +1298,36 @@ function synthesizeMasterDeduction(
   return `Regarding your inquiry on "${userMsg}": Here is a comprehensive and clear answer providing full context and precise information.`;
 }
 
+// --- ProviderManager: Health Monitor & Intelligent Router ---
+class ProviderManager {
+  private status: Map<string, { lastFail: number; failCount: number }> = new Map();
+  
+  // Register failure for a specific provider (e.g., "openrouter", "groq", "cerebras")
+  reportFailure(provider: string) {
+    const s = this.status.get(provider) || { lastFail: 0, failCount: 0 };
+    s.failCount++;
+    s.lastFail = Date.now();
+    this.status.set(provider, s);
+    console.log(`[ProviderManager] Provider ${provider} failed. Fail count: ${s.failCount}`);
+  }
+
+  // Get health status to decide whether to skip a provider
+  isHealthy(provider: string): boolean {
+    const s = this.status.get(provider);
+    if (!s) return true;
+    // Cooldown: skip for 5 minutes if more than 3 failures
+    if (s.failCount > 3 && Date.now() - s.lastFail < 1000 * 60 * 5) return false;
+    return true;
+  }
+
+  // Helper to check if a model is free-tier
+  isFree(modelId: string): boolean {
+    return modelId.endsWith(":free");
+  }
+}
+
+const omegaProviderManager = new ProviderManager();
+
 // External Server Invocation Helpers (OpenAI-compatible and Anthropic protocols)
 let openRouterExhaustedUntil = 0;
 
@@ -1311,8 +1342,8 @@ async function callOpenAICompatibleApi(
 ): Promise<string> {
   const isOpenRouter = endpoint.includes("openrouter.ai");
 
-  if (isOpenRouter && Date.now() < openRouterExhaustedUntil) {
-    throw new Error("OpenRouter currently cooling down due to credit limits");
+  if (isOpenRouter && Date.now() < openRouterExhaustedUntil && !model.endsWith(":free")) {
+    throw new Error("OpenRouter paid endpoints cooling down due to credit limits");
   }
 
   let effectiveSystem = systemInstruction;
@@ -1339,31 +1370,38 @@ async function callOpenAICompatibleApi(
     })),
   ];
 
-  // OpenRouter max_tokens: Allow up to 3000 tokens for long, deeply detailed and philosophical answers
+  // OpenRouter max_tokens: Allow up to 3000 tokens for detailed answers
   let targetTokens = isOpenRouter ? Math.min(Math.max(80, maxTokens || 2048), 3000) : maxTokens;
 
-  const makeCall = async (tokensToRequest: number) => {
+  const makeCall = async (tokensToRequest: number, modelToUse: string) => {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    };
+    if (isOpenRouter) {
+      headers["HTTP-Referer"] = process.env.APP_URL || "https://omega-ai.app";
+      headers["X-Title"] = "Omega AI Multi-Model Consensus";
+    }
     return fetch(endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers,
       body: JSON.stringify({
-        model,
+        model: modelToUse,
         messages: formattedMessages,
         temperature,
         max_tokens: tokensToRequest,
       }),
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(isOpenRouter ? 18000 : 10000),
     });
   };
 
-  let res = await makeCall(targetTokens);
+  let res = await makeCall(targetTokens, model);
 
-  // If 402 credit threshold hit, parse affordable tokens and retry immediately
+  // If 402 credit limit hit on paid model, mark cooldown for paid models and throw readable error
   if (!res.ok && res.status === 402) {
-    openRouterExhaustedUntil = Date.now() + 1000 * 60 * 10;
+    if (!model.endsWith(":free")) {
+      openRouterExhaustedUntil = Date.now() + 1000 * 60 * 5; // 5 min cooldown for paid endpoints
+    }
     const errText = await res.text().catch(() => "");
     throw new Error(`OpenRouter 402: ${errText.slice(0, 150)}`);
   }
@@ -1371,7 +1409,9 @@ async function callOpenAICompatibleApi(
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
     if (errText.includes("requires more credits")) {
-      openRouterExhaustedUntil = Date.now() + 1000 * 60 * 10;
+      if (!model.endsWith(":free")) {
+        openRouterExhaustedUntil = Date.now() + 1000 * 60 * 5;
+      }
     }
     throw new Error(`External API ${res.status}: ${errText.slice(0, 150)}`);
   }
@@ -1385,17 +1425,64 @@ async function callOpenAICompatibleApi(
   return text;
 }
 
-const OPENROUTER_MODEL_MAP: Record<string, string> = {
-  "deepseek-r1-compat": "deepseek/deepseek-r1",
-  "claude-3-5-sonnet-compat": "anthropic/claude-sonnet-4.5",
-  "gpt-4o-compat": "openai/gpt-4o",
-  "llama-3-3-compat": "meta-llama/llama-3.3-70b-instruct",
-  "qwen-2-5-compat": "qwen/qwen-2.5-72b-instruct",
-  "grok-compat": "x-ai/grok-4.3",
-  "gemini-3.8-flash": "google/gemini-2.5-flash",
-  "gemini-3-8-flash": "google/gemini-2.5-flash",
-  "gemini-3.1-pro-preview": "google/gemini-2.5-flash",
-  "omega-kernel-c1": "qwen/qwen-2.5-72b-instruct",
+const OPENROUTER_MODEL_MAP: Record<string, string[]> = {
+  "deepseek-r1-compat": [
+    "deepseek/deepseek-r1:free",
+    "deepseek/deepseek-r1",
+    "deepseek/deepseek-chat:free",
+    "deepseek/deepseek-chat",
+  ],
+  "claude-3-5-sonnet-compat": [
+    "anthropic/claude-3.7-sonnet",
+    "anthropic/claude-3.5-sonnet:beta",
+    "anthropic/claude-3.5-sonnet-20241022",
+    "anthropic/claude-3.5-sonnet",
+    "anthropic/claude-3-5-sonnet",
+  ],
+  "gpt-4o-compat": [
+    "openai/gpt-4o",
+    "openai/gpt-4o-mini:free",
+    "openai/gpt-4o-mini",
+    "openai/chatgpt-4o-latest",
+  ],
+  "llama-3-3-compat": [
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "meta-llama/llama-3.3-70b-instruct",
+    "meta-llama/llama-3.1-8b-instruct:free",
+    "meta-llama/llama-3-70b-instruct",
+  ],
+  "qwen-2-5-compat": [
+    "qwen/qwen-2.5-72b-instruct:free",
+    "qwen/qwen-2.5-72b-instruct",
+    "qwen/qwen-2.5-coder-32b-instruct:free",
+    "qwen/qwen-2.5-7b-instruct:free",
+  ],
+  "grok-compat": [
+    "x-ai/grok-2-1212",
+    "x-ai/grok-2",
+    "x-ai/grok-beta",
+  ],
+  "gemini-3.8-flash": [
+    "google/gemini-2.0-flash-exp:free",
+    "google/gemini-2.0-flash-001",
+    "google/gemini-flash-1.5",
+  ],
+  "gemini-3-8-flash": [
+    "google/gemini-2.0-flash-exp:free",
+    "google/gemini-2.0-flash-001",
+  ],
+  "gemini-3.1-pro-preview": [
+    "google/gemini-2.0-pro-exp-02-05:free",
+    "google/gemini-pro-1.5",
+  ],
+  "omega-kernel-c1": [
+    "qwen/qwen-2.5-72b-instruct:free",
+    "qwen/qwen-2.5-72b-instruct",
+  ],
+  "omega-kernel-c2": [
+    "deepseek/deepseek-r1:free",
+    "deepseek/deepseek-r1",
+  ],
 };
 
 async function handleOpenRouterRequest(
@@ -1406,31 +1493,47 @@ async function handleOpenRouterRequest(
   dynamicSystemContext: string,
   openrouterKey: string
 ): Promise<{ text: string; provider: string; error?: string } | null> {
-  if (Date.now() < openRouterExhaustedUntil) {
-    return null;
-  }
-  const orModelId = OPENROUTER_MODEL_MAP[modelId];
-  if (!orModelId) return null;
+  const candidateModels = OPENROUTER_MODEL_MAP[modelId] || (modelId.includes("/") ? [modelId] : []);
+  if (!candidateModels || candidateModels.length === 0) return null;
 
-  try {
-    const text = await callOpenAICompatibleApi(
-      "https://openrouter.ai/api/v1/chat/completions",
-      openrouterKey,
-      orModelId,
-      dynamicSystemContext,
-      messages,
-      temperature,
-      maxTokens
-    );
-    if (text && text.trim()) {
-      return { text: text.trim(), provider: `OpenRouter (${orModelId})` };
-    }
-    return null;
-  } catch (e: any) {
-    const errMsg = e?.message || "unavailable";
-    console.log(`[OpenRouter ${orModelId} direct]:`, errMsg);
+  if (!omegaProviderManager.isHealthy("openrouter")) {
     return null;
   }
+
+  // Check if request is simple (short content, little history) to prefer free models
+  const isSimpleRequest = messages.length < 3 && messages[messages.length - 1]?.content.length < 100;
+
+  for (const orModelId of candidateModels) {
+    // If request is simple, skip paid models unless no free ones are available
+    if (isSimpleRequest && !omegaProviderManager.isFree(orModelId)) {
+        // Check if there's actually a free model alternative in the list
+        const hasFree = candidateModels.some(m => omegaProviderManager.isFree(m));
+        if (hasFree) continue;
+    }
+
+    if (Date.now() < openRouterExhaustedUntil && !orModelId.endsWith(":free")) {
+      continue;
+    }
+    try {
+      const text = await callOpenAICompatibleApi(
+        "https://openrouter.ai/api/v1/chat/completions",
+        openrouterKey,
+        orModelId,
+        dynamicSystemContext,
+        messages,
+        temperature,
+        maxTokens
+      );
+      if (text && text.trim()) {
+        return { text: text.trim(), provider: `OpenRouter (${orModelId})` };
+      }
+    } catch (_e: any) {
+      // Continue to next candidate model (e.g. :free version or alternative endpoint)
+      continue;
+    }
+  }
+  omegaProviderManager.reportFailure("openrouter");
+  return null;
 }
 
 async function callAnthropicApi(
@@ -3120,6 +3223,18 @@ app.get("/api/omega/voice/catalog", (_req, res) => {
         isFlagship: true,
         accentColor: "#38bdf8",
       },
+      {
+        id: "openrouter-tts",
+        name: "OpenRouter Audio (GPT-4o Audio)",
+        company: "OpenRouter / OpenAI",
+        tagline: "توليد صوتي عصبي عبر بوابة OpenRouter الموحدة بأصوات متعددة للشخصيات والعلماء",
+        badge: "OpenRouter Audio",
+        latency: "190ms",
+        qualityRating: "9.7/10",
+        isOpenSource: false,
+        isFlagship: true,
+        accentColor: "#ec4899",
+      },
     ],
     categories: [
       { id: "scientists", nameAr: "أصوات العلماء (نيوتن، أينشتاين، تيسلا...)" },
@@ -3229,6 +3344,39 @@ app.post("/api/omega/ensemble", async (req, res) => {
 
   const ai = getGemini();
   const dynamicSystemContext = getOmegaSystemContext();
+  const openrouterKey = keys.openrouterApiKey || process.env.OPENROUTER_API_KEY || process.env.XAI_API_KEY;
+
+  // 1.5 Primary Real Multi-Model Dispatch via OpenRouter if key is configured
+  if (openrouterKey && (!attachments || attachments.length === 0)) {
+    try {
+      const results = await Promise.allSettled(
+        models.map(async (m: string) => {
+          const orRes = await handleOpenRouterRequest(
+            m,
+            messages,
+            temperature,
+            maxTokens,
+            dynamicSystemContext,
+            openrouterKey
+          );
+          if (!orRes?.text) throw new Error("Empty OpenRouter response");
+          return { modelId: m, text: orRes.text, simulated: false };
+        })
+      );
+      const orCandidates = results
+        .filter(
+          (r): r is PromiseFulfilledResult<{ modelId: string; text: string; simulated: boolean }> =>
+            r.status === "fulfilled" && !!r.value.text
+        )
+        .map((r) => r.value);
+      if (orCandidates.length > 0) {
+        ensembleCache.set(cacheKey, { timestamp: Date.now(), candidates: orCandidates });
+        return res.json({ ok: true, candidates: orCandidates, provider: "OpenRouter Ensemble" });
+      }
+    } catch {
+      // Proceed to Gemini or local fallback
+    }
+  }
 
   // If Gemini client not available, immediately use local neural synthesis
   if (!ai) {
@@ -3374,17 +3522,16 @@ COLLABORATIVE COMPLEMENTARITY MANDATE:
       try {
         const results = await Promise.allSettled(
           models.map(async (m: string) => {
-            const orModel = OPENROUTER_MODEL_MAP[m] || "meta-llama/llama-3.3-70b-instruct";
-            const text = await callOpenAICompatibleApi(
-              "https://openrouter.ai/api/v1/chat/completions",
-              openrouterKey,
-              orModel,
-              dynamicSystemContext,
+            const orRes = await handleOpenRouterRequest(
+              m,
               messages,
               temperature,
-              maxTokens
+              maxTokens,
+              dynamicSystemContext,
+              openrouterKey
             );
-            return { modelId: m, text };
+            if (!orRes?.text) throw new Error("Empty OpenRouter response");
+            return { modelId: m, text: orRes.text };
           })
         );
         const candidates = results
@@ -3572,7 +3719,7 @@ ${
 
   const contents = inlineParts.length > 0 ? [...inlineParts, { text: deductionPrompt }] : deductionPrompt;
 
-  const openrouterKey = req.body.keys?.openrouterApiKey || process.env.OPENROUTER_API_KEY;
+  const openrouterKey = req.body.keys?.openrouterApiKey || process.env.OPENROUTER_API_KEY || process.env.XAI_API_KEY;
   const openRouterErrors: string[] = [];
 
   // 1. High-capacity, ultra-fast synthesizer via OpenRouter (Qwen 2.5 72B / Llama 3.3 70B / Claude Sonnet / GPT-4o)
@@ -3792,7 +3939,7 @@ app.post("/api/omega/complete", async (req, res) => {
   // Real Llama 3.3 direct server invocation
   if (modelId === "llama-3-3-compat") {
     const llamaSys = `${OMEGA_SYSTEM_CONTEXT}\nYou represent the Meta Llama 3.3 Server. Provide direct, versatile, practical, and highly capable answers.`;
-    if (groqKey) {
+    if (groqKey && omegaProviderManager.isHealthy("groq")) {
       try {
         const text = await callOpenAICompatibleApi(
           "https://api.groq.com/openai/v1/chat/completions",
@@ -3805,23 +3952,8 @@ app.post("/api/omega/complete", async (req, res) => {
         );
         return res.json({ ok: true, text, modelId, tokensUsed: Math.round(text.length / 4), provider: "Groq Llama 3.3 (Direct)" });
       } catch (e: any) {
+        omegaProviderManager.reportFailure("groq");
         console.log("[Llama Groq direct]:", e?.message || "unavailable");
-      }
-    }
-    if (openrouterKey) {
-      try {
-        const text = await callOpenAICompatibleApi(
-          "https://openrouter.ai/api/v1/chat/completions",
-          openrouterKey,
-          "meta-llama/llama-3.3-70b-instruct",
-          llamaSys,
-          messages,
-          temperature,
-          maxTokens
-        );
-        return res.json({ ok: true, text, modelId, tokensUsed: Math.round(text.length / 4), provider: "OpenRouter Llama 3.3 (Direct)" });
-      } catch (e: any) {
-        console.log("[Llama OpenRouter direct]:", e?.message || "unavailable");
       }
     }
     if (ollamaBaseUrl) {
@@ -3861,7 +3993,7 @@ app.post("/api/omega/complete", async (req, res) => {
         console.log("[DeepSeek direct]:", e?.message || "unavailable");
       }
     }
-    if (groqKey) {
+    if (groqKey && omegaProviderManager.isHealthy("groq")) {
       try {
         const text = await callOpenAICompatibleApi(
           "https://api.groq.com/openai/v1/chat/completions",
@@ -3874,23 +4006,8 @@ app.post("/api/omega/complete", async (req, res) => {
         );
         return res.json({ ok: true, text, modelId, tokensUsed: Math.round(text.length / 4), provider: "Groq DeepSeek (Direct)" });
       } catch (e: any) {
+        omegaProviderManager.reportFailure("groq");
         console.log("[DeepSeek Groq direct]:", e?.message || "unavailable");
-      }
-    }
-    if (openrouterKey) {
-      try {
-        const text = await callOpenAICompatibleApi(
-          "https://openrouter.ai/api/v1/chat/completions",
-          openrouterKey,
-          "deepseek/deepseek-r1",
-          dsSys,
-          messages,
-          temperature,
-          maxTokens
-        );
-        return res.json({ ok: true, text, modelId, tokensUsed: Math.round(text.length / 4), provider: "OpenRouter DeepSeek (Direct)" });
-      } catch (e: any) {
-        console.log("[DeepSeek OpenRouter direct]:", e?.message || "unavailable");
       }
     }
   }
@@ -3911,22 +4028,6 @@ app.post("/api/omega/complete", async (req, res) => {
         return res.json({ ok: true, text, modelId, tokensUsed: Math.round(text.length / 4), provider: "Anthropic API (Direct)" });
       } catch (e: any) {
         console.log("[Anthropic direct]:", e?.message || "unavailable");
-      }
-    }
-    if (openrouterKey) {
-      try {
-        const text = await callOpenAICompatibleApi(
-          "https://openrouter.ai/api/v1/chat/completions",
-          openrouterKey,
-          "anthropic/claude-3.5-sonnet",
-          claudeSys,
-          messages,
-          temperature,
-          maxTokens
-        );
-        return res.json({ ok: true, text, modelId, tokensUsed: Math.round(text.length / 4), provider: "OpenRouter Claude (Direct)" });
-      } catch (e: any) {
-        console.log("[Claude OpenRouter direct]:", e?.message || "unavailable");
       }
     }
   }
@@ -3950,22 +4051,6 @@ app.post("/api/omega/complete", async (req, res) => {
         console.log("[OpenAI direct]:", e?.message || "unavailable");
       }
     }
-    if (openrouterKey) {
-      try {
-        const text = await callOpenAICompatibleApi(
-          "https://openrouter.ai/api/v1/chat/completions",
-          openrouterKey,
-          "openai/gpt-4o",
-          gptSys,
-          messages,
-          temperature,
-          maxTokens
-        );
-        return res.json({ ok: true, text, modelId, tokensUsed: Math.round(text.length / 4), provider: "OpenRouter GPT-4o (Direct)" });
-      } catch (e: any) {
-        console.log("[GPT-4o OpenRouter direct]:", e?.message || "unavailable");
-      }
-    }
   }
 
   // Real Grok (xAI) direct server invocation
@@ -3985,22 +4070,6 @@ app.post("/api/omega/complete", async (req, res) => {
         return res.json({ ok: true, text, modelId, tokensUsed: Math.round(text.length / 4), provider: "xAI API (Direct)" });
       } catch (e: any) {
         console.log("[Grok xAI direct]:", e?.message || "unavailable");
-      }
-    }
-    if (openrouterKey) {
-      try {
-        const text = await callOpenAICompatibleApi(
-          "https://openrouter.ai/api/v1/chat/completions",
-          openrouterKey,
-          "x-ai/grok-2-1212",
-          grokSys,
-          messages,
-          temperature,
-          maxTokens
-        );
-        return res.json({ ok: true, text, modelId, tokensUsed: Math.round(text.length / 4), provider: "OpenRouter Grok (Direct)" });
-      } catch (e: any) {
-        console.log("[Grok OpenRouter direct]:", e?.message || "unavailable");
       }
     }
   }
@@ -4149,25 +4218,23 @@ app.post("/api/omega/complete", async (req, res) => {
     console.log(`[Omega complete]: Rate limit / Gemini error for ${modelId} (${error?.message || ""}), checking OpenRouter...`);
     if (openrouterKey) {
       try {
-        const orFallbackModel = OPENROUTER_MODEL_MAP[modelId] || "meta-llama/llama-3.3-70b-instruct";
-        const orText = await callOpenAICompatibleApi(
-          "https://openrouter.ai/api/v1/chat/completions",
-          openrouterKey,
-          orFallbackModel,
-          dynamicSystemContext,
+        const orResult = await handleOpenRouterRequest(
+          modelId,
           messages,
           temperature,
-          maxTokens
+          maxTokens,
+          dynamicSystemContext,
+          openrouterKey
         );
-        if (orText) {
+        if (orResult?.text) {
           const elapsed = Date.now() - completeStart;
           recordModelOutcomeSafe(userId, modelId, domain, true, 0.89, elapsed);
           return res.json({
             ok: true,
-            text: orText,
+            text: orResult.text,
             modelId,
-            tokensUsed: Math.round(orText.length / 4),
-            provider: `OpenRouter (${orFallbackModel})`,
+            tokensUsed: Math.round(orResult.text.length / 4),
+            provider: orResult.provider || "OpenRouter (Fallback)",
           });
         }
       } catch (orErr: any) {
@@ -5761,6 +5828,32 @@ app.post(["/api/omega/core/process", "/api/omega/core"], async (req, res) => {
 
       // تحقق حقيقي فعلي فقط — لا "verified: true" افتراضي عند الفشل
       verify: async (q, answer) => {
+        if (openrouterKey) {
+          try {
+            const verifyRes = await handleOpenRouterRequest(
+              "gemini-3.8-flash",
+              [
+                {
+                  role: "user",
+                  content: `دقّق في هذه الإجابة بحثاً عن تناقض داخلي أو هلوسة. أجب فقط بـ JSON صالح بدون أي نص إضافي: {"verified": true, "score": 0.95}\nالسؤال: ${q}\nالإجابة: ${answer}`,
+                },
+              ],
+              0.1,
+              256,
+              "You are a strict JSON factual consistency verifier. Output ONLY valid JSON: {\"verified\": boolean, \"score\": number}.",
+              openrouterKey
+            );
+            if (verifyRes?.text) {
+              const cleanJson = verifyRes.text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+              const parsed = JSON.parse(cleanJson);
+              if (typeof parsed.verified === "boolean" && typeof parsed.score === "number") {
+                return { verified: parsed.verified, score: parsed.score };
+              }
+            }
+          } catch {
+            // Fall through to Gemini verifier if available
+          }
+        }
         const ai = getGemini();
         if (!ai) return null;
         try {
@@ -5787,6 +5880,33 @@ app.post(["/api/omega/core/process", "/api/omega/core"], async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ ok: false, error: err?.message });
   }
+});
+
+// OpenRouter Status & Runtime Key Configuration Endpoints
+app.get("/api/omega/openrouter/status", async (_req, res) => {
+  const key = (process.env.OPENROUTER_API_KEY || "").trim();
+  const configured = Boolean(key);
+  res.json({
+    ok: true,
+    configured,
+    maskedKey: configured ? `${key.slice(0, 8)}...${key.slice(-4)}` : null,
+    modelsMap: OPENROUTER_MODEL_MAP,
+    cooldownActive: Date.now() < openRouterExhaustedUntil,
+  });
+});
+
+app.post("/api/omega/openrouter/config", async (req, res) => {
+  const { apiKey } = req.body || {};
+  if (typeof apiKey === "string") {
+    process.env.OPENROUTER_API_KEY = apiKey.trim();
+    openRouterExhaustedUntil = 0;
+  }
+  const configured = Boolean((process.env.OPENROUTER_API_KEY || "").trim());
+  res.json({
+    ok: true,
+    configured,
+    modelsMap: OPENROUTER_MODEL_MAP,
+  });
 });
 
 async function startServer() {

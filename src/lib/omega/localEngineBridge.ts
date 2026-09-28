@@ -18,11 +18,13 @@ export interface LocalEngineConfig {
   customOpenAiUrl: string; // e.g. "http://localhost:1234/v1"
   customOpenAiKey?: string;
   customModelName?: string;
+  openrouterApiKey?: string;
+  openrouterModel?: string;
   isEnabled: boolean;
 }
 
 export interface EngineHealthStatus {
-  service: "ollama" | "comfyui" | "custom_openai";
+  service: "ollama" | "comfyui" | "custom_openai" | "openrouter";
   isOnline: boolean;
   latencyMs: number;
   availableModels: string[];
@@ -37,6 +39,8 @@ const DEFAULT_LOCAL_CONFIG: LocalEngineConfig = {
   customOpenAiUrl: "http://localhost:1234/v1",
   customOpenAiKey: "",
   customModelName: "local-model",
+  openrouterApiKey: "",
+  openrouterModel: "qwen/qwen-2.5-72b-instruct",
   isEnabled: false,
 };
 
@@ -64,12 +68,59 @@ export class LocalEngineBridge {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(this.config));
       } catch {}
+      if (typeof cfg.openrouterApiKey === "string") {
+        fetch("/api/omega/openrouter/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ apiKey: cfg.openrouterApiKey }),
+        }).catch(() => {});
+      }
     }
     return this.config;
   }
 
   public getConfig(): LocalEngineConfig {
     return { ...this.config };
+  }
+
+  /**
+   * Health Check: Tests OpenRouter gateway status (server .env or user key)
+   */
+  async checkOpenRouterHealth(apiKeyOverride?: string): Promise<EngineHealthStatus> {
+    const t0 = performance.now();
+    const key = (apiKeyOverride ?? this.config.openrouterApiKey ?? "").trim();
+    try {
+      if (key) {
+        await fetch("/api/omega/openrouter/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ apiKey: key }),
+        }).catch(() => {});
+      }
+      const res = await fetch("/api/omega/openrouter/status", {
+        signal: AbortSignal.timeout(3500),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const models = data.modelsMap ? Object.values(data.modelsMap) as string[] : [];
+        return {
+          service: "openrouter",
+          isOnline: Boolean(data.configured),
+          latencyMs: Math.round(performance.now() - t0),
+          availableModels: models,
+          error: data.configured ? undefined : "أدخل مفتاح OPENROUTER_API_KEY للتفعيل",
+        };
+      }
+      throw new Error(`HTTP ${res.status}`);
+    } catch (err: any) {
+      return {
+        service: "openrouter",
+        isOnline: false,
+        latencyMs: Math.round(performance.now() - t0),
+        availableModels: [],
+        error: err?.message || "بوابة OpenRouter غير متصلة",
+      };
+    }
   }
 
   /**

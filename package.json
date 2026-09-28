@@ -17,6 +17,7 @@
     "@types/katex": "^0.16.8",
     "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "^5.0.4",
+    "chromadb": "^3.5.0",
     "dotenv": "^17.2.3",
     "elevenlabs": "^1.59.0",
     "express": "^4.21.2",

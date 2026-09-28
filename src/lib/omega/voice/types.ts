@@ -11,6 +11,8 @@ export enum VoiceTaskCategory {
 
 export type VoiceProviderId =
   | "elevenlabs"
+  | "openrouter-tts"
+  | "openrouter"
   | "openai-tts"
   | "openai"
   | "gemini-tts"

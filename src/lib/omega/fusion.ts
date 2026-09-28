@@ -425,8 +425,8 @@ export async function fuseResponses(
       lastPulseAt: Date.now(),
       domain,
       corePsiScore: candidates[0]?.psi ?? 0.9,
-      selfCheckVerified: verification ? verification.passed : true,
-      selfCheckConfidence: verification ? verification.confidence : 0.95,
+      selfCheckVerified: verification ? verification.verified : true,
+      selfCheckConfidence: verification ? verification.score : 0.95,
     });
 
     const avgPsi = Number(
@@ -504,7 +504,7 @@ export async function fuseResponses(
 
   // Only check for equation enrichment when the domain itself is math/science and the question explicitly involves equations/laws
   const isMathOrPhysicsQuery =
-    domain === "math_proving" ||
+    domain === "math_logic" ||
     /معادل|قانون|نيوتن|سقوط|شاقولي|كولاتز|فيزياء|رياضيات|حساب|اشتقاق|تكامل|سرعة|تسارع|طاقة|جاذبية|collatz|newton|equation|formula/i.test(question);
   const hasEquations = isMathOrPhysicsQuery && candidates.some((c) => c.text.includes("$$") || c.text.includes("$"));
   const cand0HasEquations = candidates[0].text.includes("$$") || candidates[0].text.includes("$");
@@ -521,8 +521,8 @@ export async function fuseResponses(
       lastPulseAt: Date.now(),
       domain,
       corePsiScore: candidates[0].psi,
-      selfCheckVerified: verification ? verification.passed : true,
-      selfCheckConfidence: verification ? verification.confidence : 0.95,
+      selfCheckVerified: verification ? verification.verified : true,
+      selfCheckConfidence: verification ? verification.score : 0.95,
       activeStrategy: "Direct Consensus ⇄ OmegaKernel & OmegaCore",
     });
     return {
@@ -552,8 +552,8 @@ export async function fuseResponses(
     lastPulseAt: Date.now(),
     domain,
     corePsiScore: candidates[0]?.psi ?? 0.9,
-    selfCheckVerified: verification ? verification.passed : true,
-    selfCheckConfidence: verification ? verification.confidence : 0.95,
+    selfCheckVerified: verification ? verification.verified : true,
+    selfCheckConfidence: verification ? verification.score : 0.95,
   });
 
   return {

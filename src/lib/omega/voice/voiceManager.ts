@@ -1,5 +1,6 @@
 import { ElevenLabsAdapter } from "./providers/elevenLabs";
 import { OpenAITtsAdapter } from "./providers/openaiTts";
+import { OpenRouterTtsAdapter } from "./providers/openRouterTts";
 import { GeminiTtsAdapter } from "./providers/geminiTts";
 import { XttsV2Adapter } from "./providers/xttsV2";
 import { KokoroTtsAdapter } from "./providers/kokoroTts";
@@ -23,6 +24,7 @@ const GEMINI_VOICE_BY_PERSONA: Record<string, string> = {
   "einstein": "Fenrir",
   "tesla": "Orus",
   "ibn-alhaytham": "Iapetus",
+  "ibn-al-haytham": "Iapetus",
   "curie": "Aoede",
   "feynman": "Puck",
   "morgan-freeman": "Gacrux",
@@ -33,12 +35,32 @@ const GEMINI_VOICE_BY_PERSONA: Record<string, string> = {
   "cyber-ai-omega": "Zephyr",
 };
 
+// صوت OpenRouter Audio مميّز لكل شخصية
+const OPENROUTER_VOICE_BY_PERSONA: Record<string, string> = {
+  "doc-arabic-fusha": "onyx",
+  "professor-omega": "sage",
+  "newton": "ash",
+  "einstein": "ballad",
+  "tesla": "echo",
+  "ibn-alhaytham": "onyx",
+  "ibn-al-haytham": "onyx",
+  "curie": "nova",
+  "feynman": "verse",
+  "morgan-freeman": "onyx",
+  "david-attenborough": "fable",
+  "carl-sagan": "ballad",
+  "news-anchor-01": "alloy",
+  "storyteller-01": "coral",
+  "cyber-ai-omega": "shimmer",
+};
+
 export class VoiceManager {
   private providers: Map<VoiceProviderId, VoiceProviderAdapter> = new Map();
   private playHT: PlayHTAdapter;
 
   constructor() {
     const elevenLabs = new ElevenLabsAdapter();
+    const openRouterTts = new OpenRouterTtsAdapter();
     const openaiTts = new OpenAITtsAdapter();
     const geminiTts = new GeminiTtsAdapter();
     const xttsV2 = new XttsV2Adapter();
@@ -46,6 +68,8 @@ export class VoiceManager {
     const cartesia = new CartesiaAdapter();
 
     this.providers.set("elevenlabs", elevenLabs);
+    this.providers.set("openrouter-tts", openRouterTts);
+    this.providers.set("openrouter", openRouterTts);
     this.providers.set("openai-tts", openaiTts);
     this.providers.set("openai", openaiTts);
     this.providers.set("gemini-tts", geminiTts);
@@ -100,6 +124,7 @@ export class VoiceManager {
   getProvidersStatus(): Array<{ id: VoiceProviderId; name: string; available: boolean }> {
     const unique: VoiceProviderId[] = [
       "elevenlabs",
+      "openrouter-tts",
       "gemini-tts",
       "openai-tts",
       "cartesia",
@@ -122,7 +147,7 @@ export class VoiceManager {
 
   /**
    * Resolves the best persona and available provider for a synthesis request.
-   * Falls back to available providers (such as Gemini TTS) if the primary provider's API key is not set.
+   * Falls back to available providers (such as OpenRouter TTS or Gemini TTS) if the primary provider's API key is not set.
    */
   async synthesize(options: VoiceSynthesisOptions): Promise<VoiceSynthesisResult> {
     const cleanText = (options.text || "").trim();
@@ -147,14 +172,15 @@ export class VoiceManager {
     const targetSpeed = options.speed ?? persona.speed ?? 1.0;
     const stylePrompt = options.stylePrompt ?? persona.stylePrompt;
 
-    // Ordered cascade: try requested provider first, then available fallbacks
+    // Ordered cascade: try requested provider first, then available fallbacks (prioritize Kokoro for speed)
     const fallbackOrder: VoiceProviderId[] = [
       requestedProvider,
+      "kokoro-tts",
       "elevenlabs",
+      "openrouter-tts",
       "gemini-tts",
       "openai-tts",
       "cartesia",
-      "kokoro-tts",
       "xtts-v2",
     ];
     const uniqueOrder = Array.from(new Set(fallbackOrder));
@@ -194,7 +220,10 @@ export class VoiceManager {
             ? options.voiceId || persona.voiceId
             : providerId === "gemini-tts" && GEMINI_VOICE_BY_PERSONA[persona.id]
               ? GEMINI_VOICE_BY_PERSONA[persona.id]
-              : this.getDefaultVoiceForProvider(providerId, category);
+              : (providerId === "openrouter-tts" || providerId === "openrouter") &&
+                OPENROUTER_VOICE_BY_PERSONA[persona.id]
+                ? OPENROUTER_VOICE_BY_PERSONA[persona.id]
+                : this.getDefaultVoiceForProvider(providerId, category);
 
         const { buffer, mimeType } = await adapter.generate(cleanText, effectiveVoiceId, {
           speed: targetSpeed,
@@ -231,6 +260,8 @@ export class VoiceManager {
           category === VoiceTaskCategory.SCIENTIFIC
           ? "Charon"
           : "Kore";
+      case "openrouter-tts":
+      case "openrouter":
       case "openai-tts":
       case "openai":
         return category === VoiceTaskCategory.DOCUMENTARY ||

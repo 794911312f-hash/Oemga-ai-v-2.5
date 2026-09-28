@@ -91,6 +91,18 @@ export const OMEGA_VOICE_ENGINES: Record<string, VoiceEngineSpec> = {
     isFlagship: true,
     accentColor: "#38bdf8",
   },
+  "openrouter-tts": {
+    id: "openrouter-tts",
+    name: "OpenRouter Audio (GPT-4o Audio)",
+    company: "OpenRouter / OpenAI",
+    tagline: "بوابة صوتية موحدة عبر OpenRouter تدعم أصوات Sage وOnyx وBallad وAsh العصبية",
+    badge: "OpenRouter Unified Audio",
+    latency: "190ms",
+    qualityRating: "9.7/10",
+    isOpenSource: false,
+    isFlagship: true,
+    accentColor: "#ec4899",
+  },
 };
 
 export type VoiceCategory = "scientists" | "celebrities" | "documentary";
