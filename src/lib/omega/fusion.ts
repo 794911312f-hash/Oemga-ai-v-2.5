@@ -93,7 +93,7 @@ export interface FusionOptions {
   onStepProgress?: (step: "routing" | "gathering" | "embedding" | "scoring" | "resolving" | "verifying", details?: string) => void;
 }
 
-async function gatherCandidates(
+export async function gatherCandidates(
   messages: ChatMsg[],
   models: ModelId[],
   opts: FusionOptions,
