@@ -172,7 +172,8 @@ export type VideoModelId =
   | "pixverse-ai"
   | "wan-2-2-alibaba"
   | "hunyuan-video-tencent"
-  | "cogvideox";
+  | "cogvideox"
+  | "open-sora-2";
 
 export interface VideoModelSpec {
   id: VideoModelId;
@@ -305,6 +306,19 @@ export const OMEGA_VIDEO_MODELS: Record<VideoModelId, VideoModelSpec> = {
     physicsRating: "9.5/10",
     description: "نموذج مفتوح المصدر بمعمارية Expert Transformer و3D VAE يوفر استمرارية مكانية وزمانية استثنائية.",
     strengths: ["أوزان مفتوحة ومجانية بالكامل", "ترميز زماني مكاني 3D VAE متقدم", "دقة في نمذجة الحركة المعقدة"],
+  },
+  "open-sora-2": {
+    id: "open-sora-2",
+    name: "Open-Sora 2.0 (HPC-AI Tech)",
+    company: "HPC-AI Tech / Colossal-AI",
+    tagline: "معمارية STDiT3 مفتوحة المصدر بـ 11B معامل لتوليد فيديو سينمائي مع تحكم دقيق بالحركة والكاميرا",
+    badge: "مفتوح المصدر STDiT3 11B",
+    accentColor: "#14b8a6",
+    resolution: "1080p / 2K STDiT3",
+    fps: 30,
+    physicsRating: "9.7/10",
+    description: "نموذج Open-Sora 2.0 المفتوح المصدر بالكامل بمعمارية Spatial-Temporal Diffusion Transformer (STDiT3) و3D Video VAE مع تحكم صريح بدرجة الحركة (Motion Score) ومسار الكاميرا.",
+    strengths: ["معمارية STDiT3 مفتوحة المصدر بـ 11 مليار معامل", "تحكم صريح في مسار الكاميرا ودرجة الحركة (Motion Score)", "ضغط زماني مكاني 3D VAE وتدفق Rectified Flow فائق الكفاءة"],
   },
 };
 

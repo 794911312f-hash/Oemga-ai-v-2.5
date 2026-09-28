@@ -141,6 +141,7 @@ const INTERNAL_TOOLS: InternalTool[] = [
   { id: "wan-2-2-alibaba", name: "Wan 2.2", type: "video", strengths: ["open_source", "character", "consistent"], costTier: "free", latency: "medium" },
   { id: "hunyuan-video-tencent", name: "HunyuanVideo", type: "video", strengths: ["open_source", "high_motion", "long_form"], costTier: "free", latency: "medium" },
   { id: "cogvideox", name: "CogVideoX", type: "video", strengths: ["open_source", "text-to-video"], costTier: "free", latency: "medium" },
+  { id: "open-sora-2", name: "Open-Sora 2.0", type: "video", strengths: ["open_source", "cinematic", "camera", "physics", "motion", "long_form"], costTier: "free", latency: "medium" },
   { id: "flux1", name: "FLUX.1", type: "image", strengths: ["photoreal", "8k", "detail", "portrait", "text_render"], costTier: "cheap", latency: "fast" },
   { id: "elevenlabs", name: "ElevenLabs", type: "voice", strengths: ["arabic", "character", "emotion", "high_quality"], costTier: "premium", latency: "fast" },
   { id: "cartesia", name: "Cartesia Sonic", type: "voice", strengths: ["fast", "low_latency", "natural"], costTier: "cheap", latency: "fast" },

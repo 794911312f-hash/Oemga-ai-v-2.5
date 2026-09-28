@@ -31,6 +31,10 @@ import {
 } from "lucide-react";
 import { OMEGA_VIDEO_MODELS, type VideoModelId } from "../../lib/omega/models";
 import {
+  globalOmegaVideoEngine,
+  type OmegaVideoEngineBlueprint,
+} from "../../lib/omega/omegaVideoEngine";
+import {
   speakWithOmega,
   stopSpeaking,
   pauseSpeaking,
@@ -59,6 +63,7 @@ export interface VideoGenerationData {
   scientistEra?: string;
   keyEquation?: string;
   disclaimer?: string;
+  engineBlueprint?: OmegaVideoEngineBlueprint;
 }
 
 interface OmegaVideoPlayerProps {
@@ -94,8 +99,35 @@ export const OmegaVideoPlayer: React.FC<OmegaVideoPlayerProps> = ({
 
   const [activeModelId, setActiveModelId] = useState<VideoModelId>(initialModelId);
   const activeModelSpec = OMEGA_VIDEO_MODELS[activeModelId] || OMEGA_VIDEO_MODELS["veo-google"];
+  const [engineBlueprint, setEngineBlueprint] = useState<OmegaVideoEngineBlueprint | null>(
+    rawData.engineBlueprint || null
+  );
 
   const durationSec = rawData.duration || 18;
+
+  useEffect(() => {
+    if (rawData.engineBlueprint) {
+      setEngineBlueprint(rawData.engineBlueprint);
+      return;
+    }
+    let mounted = true;
+    globalOmegaVideoEngine
+      .produceVideoBlueprint({
+        prompt: currentPrompt,
+        durationSec,
+        style: rawData.style || "cinematic",
+        targetModelId: activeModelId,
+        seed: 777101,
+        numShots: 3,
+      })
+      .then((bp) => {
+        if (mounted) setEngineBlueprint(bp);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [currentPrompt, durationSec, rawData.style, activeModelId, rawData.engineBlueprint]);
   const p = currentPrompt.toLowerCase();
   const isFreeFall =
     rawData.theme === "free_fall" ||
@@ -1706,15 +1738,13 @@ export const OmegaVideoPlayer: React.FC<OmegaVideoPlayerProps> = ({
             {activeScene.name}
           </span>
 
-          {rawData.isPipelineGenerated && (
-            <button
-              type="button"
-              onClick={() => setShowPipelineDetails((prev) => !prev)}
-              className="px-2 py-0.5 rounded bg-purple-950/80 border border-purple-500/40 text-purple-300 hover:text-white transition-colors cursor-pointer text-[10px]"
-            >
-              {showPipelineDetails ? "إخفاء المراحل" : "عرض مراحل الإنتاج"}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setShowPipelineDetails((prev) => !prev)}
+            className="px-2 py-0.5 rounded bg-purple-950/80 border border-purple-500/40 text-purple-300 hover:text-white transition-colors cursor-pointer text-[10px]"
+          >
+            {showPipelineDetails ? "إخفاء محرك الفيديو" : "محرك أوميغا للفيديو (6 وحدات)"}
+          </button>
         </div>
 
         {/* Right: Subtitles, Speed, Video Export, Snapshot, PiP, Fullscreen */}
@@ -1787,51 +1817,165 @@ export const OmegaVideoPlayer: React.FC<OmegaVideoPlayerProps> = ({
         </div>
       </div>
 
-      {/* Expandable Pipeline Architecture Drawer */}
-      {showPipelineDetails && rawData.isPipelineGenerated && (
-        <div className="p-4 bg-slate-900/90 border-t border-slate-800 space-y-3" dir="rtl">
-          <div className="flex items-center justify-between">
+      {/* Expandable Omega Video Engine (6 Modules) & Pipeline Architecture Drawer */}
+      {showPipelineDetails && (
+        <div className="p-4 bg-slate-900/95 border-t border-slate-800 space-y-3" dir="rtl">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <GitMerge className="w-4 h-4 text-purple-400" />
               <span className="text-xs font-bold text-white">
-                هندسة خط الإنتاج المتكامل (Scientific Video Pipeline):
+                محرك أوميغا للفيديو المتكامل (Omega Video Engine v3.0 — 6 Core Modules):
               </span>
             </div>
-            <span className="text-[10px] text-slate-400 font-mono">
-              7 مراحل إنتاج متسلسلة • استقرار فيزيائي 9.9/10
-            </span>
+            {engineBlueprint && (
+              <span className="px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-[10px] text-emerald-300 font-mono">
+                Video Quality Verifier: Ψ = {(engineBlueprint.qualityAudit.overallPsiScore * 100).toFixed(1)}% ✓
+              </span>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
-            <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
-              <div className="text-purple-400 font-semibold mb-0.5">1. كتابة السيناريو</div>
-              <div className="text-slate-300">GPT-5 / Claude / Gemini</div>
+          {engineBlueprint && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 text-[11px]">
+              {/* 1. Prompt Director */}
+              <div className="p-2.5 rounded-xl bg-slate-950/90 border border-purple-500/30 space-y-1">
+                <div className="text-purple-400 font-bold flex items-center justify-between">
+                  <span>1. Prompt Director (مخرج الوصف)</span>
+                  <span className="text-[9px] font-mono text-purple-300">8K LUT</span>
+                </div>
+                <div className="text-slate-300 text-[10px] leading-relaxed">
+                  {engineBlueprint.promptDirector.masterCinematicPromptAr}
+                </div>
+                <div className="text-[9px] text-slate-400 font-mono truncate">
+                  LUT: {engineBlueprint.promptDirector.lutProfile}
+                </div>
+              </div>
+
+              {/* 2. Storyboard Planner */}
+              <div className="p-2.5 rounded-xl bg-slate-950/90 border border-cyan-500/30 space-y-1">
+                <div className="text-cyan-400 font-bold flex items-center justify-between">
+                  <span>2. Storyboard Planner (مخطط اللقطات)</span>
+                  <span className="text-[9px] font-mono text-cyan-300">
+                    {engineBlueprint.storyboard.length} Shots
+                  </span>
+                </div>
+                <div className="space-y-1 text-[10px] text-slate-300">
+                  {engineBlueprint.storyboard.map((s) => (
+                    <div key={s.shotId} className="truncate">
+                      • <span className="text-cyan-200 font-semibold">{s.titleAr}</span> ({s.durationSec}s)
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 3. Camera Director */}
+              <div className="p-2.5 rounded-xl bg-slate-950/90 border border-blue-500/30 space-y-1">
+                <div className="text-blue-400 font-bold flex items-center justify-between">
+                  <span>3. Camera Director (مخرج الكاميرا)</span>
+                  <span className="text-[9px] font-mono text-blue-300">Kinematics</span>
+                </div>
+                <div className="space-y-1 text-[10px] text-slate-300">
+                  {engineBlueprint.cameraDirectives.map((c) => (
+                    <div key={c.shotNumber} className="truncate">
+                      • اللقطة {c.shotNumber}: <span className="text-blue-200 font-mono">{c.movementType}</span> ({c.focalLengthMm}mm, {c.apertureFStop}, Motion {c.motionScore})
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 4. Character Manager */}
+              <div className="p-2.5 rounded-xl bg-slate-950/90 border border-emerald-500/30 space-y-1">
+                <div className="text-emerald-400 font-bold flex items-center justify-between">
+                  <span>4. Character Manager (ثبات الشخصيات)</span>
+                  <span className="text-[9px] font-mono text-emerald-300">
+                    Seed #{engineBlueprint.characters[0]?.lockedSeed}
+                  </span>
+                </div>
+                <div className="text-slate-300 text-[10px] leading-relaxed">
+                  <span className="text-emerald-200 font-semibold">
+                    {engineBlueprint.characters[0]?.nameAr}:
+                  </span>{" "}
+                  {engineBlueprint.characters[0]?.appearanceDescriptorAr}
+                </div>
+                <div className="text-[9px] text-emerald-400 font-mono">
+                  Identity Lock Weight: {((engineBlueprint.characters[0]?.consistencyWeight || 0.98) * 100).toFixed(0)}% (IP-Adapter + SeedLock)
+                </div>
+              </div>
+
+              {/* 5. Scene Consistency Engine */}
+              <div className="p-2.5 rounded-xl bg-slate-950/90 border border-amber-500/30 space-y-1">
+                <div className="text-amber-400 font-bold flex items-center justify-between">
+                  <span>5. Scene Consistency Engine (الاتساق الزمني)</span>
+                  <span className="text-[9px] font-mono text-amber-300">
+                    {(engineBlueprint.sceneConsistency.temporalCoherenceIndex * 100).toFixed(1)}%
+                  </span>
+                </div>
+                <div className="text-slate-300 text-[10px] leading-relaxed">
+                  توحيد زاوية الإضاءة (Azimuth 42°) ومصفوفة الألوان وتدفق البصريات (Optical Flow) بين اللقطات المتتالية.
+                </div>
+                <div className="text-[9px] text-amber-300/80 font-mono">
+                  Master Seed Lock: #{engineBlueprint.sceneConsistency.globalSeedLock}
+                </div>
+              </div>
+
+              {/* 6. Video Quality Verifier */}
+              <div className="p-2.5 rounded-xl bg-slate-950/90 border border-pink-500/30 space-y-1">
+                <div className="text-pink-400 font-bold flex items-center justify-between">
+                  <span>6. Video Quality Verifier (مدقق الجودة)</span>
+                  <span className="text-[9px] font-mono text-pink-300">
+                    Ψ = {(engineBlueprint.qualityAudit.overallPsiScore * 100).toFixed(1)}%
+                  </span>
+                </div>
+                <div className="text-slate-300 text-[10px] leading-relaxed">
+                  {engineBlueprint.qualityAudit.verdictAr}
+                </div>
+                <div className="text-[9px] text-slate-400 font-mono">
+                  Adherence: {(engineBlueprint.qualityAudit.metrics.promptAdherence * 100).toFixed(0)}% • Physics: {(engineBlueprint.qualityAudit.metrics.cameraPhysicsRealism * 100).toFixed(0)}%
+                </div>
+              </div>
             </div>
-            <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
-              <div className="text-cyan-400 font-semibold mb-0.5">2. توليد البورتريه</div>
-              <div className="text-slate-300">FLUX.1 Pro / Imagen 3</div>
+          )}
+
+          {/* Omega Video Optimizer (OVO — V25.1 EMA-Deviation Inference Controller) */}
+          {engineBlueprint?.ovoTelemetry && (
+            <div className="p-3 rounded-xl bg-gradient-to-r from-slate-950 via-purple-950/30 to-slate-950 border border-cyan-500/30 space-y-2">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="text-[11px] font-bold text-cyan-300">
+                    Omega Video Optimizer (OVO v25.1 — EMA-Deviation Inference Loop):
+                  </span>
+                </div>
+                <span className="text-[9px] font-mono text-purple-300 bg-purple-950/70 px-2 py-0.5 rounded border border-purple-500/30">
+                  preS = {engineBlueprint.ovoTelemetry.summaryMetrics.preShiftMeanS} • ΔS = +{engineBlueprint.ovoTelemetry.summaryMetrics.peakPostShiftDeltaS} • ω_mean = {engineBlueprint.ovoTelemetry.summaryMetrics.meanOmegaBlendWeight}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[10px]">
+                <div className="p-1.5 rounded-lg bg-slate-900/90 border border-slate-800">
+                  <div className="text-cyan-400 font-bold">OmegaFrame</div>
+                  <div className="text-slate-300 text-[9px]">IGS (KL & H_norm EMA-Deviation)</div>
+                </div>
+                <div className="p-1.5 rounded-lg bg-slate-900/90 border border-slate-800">
+                  <div className="text-purple-400 font-bold">OmegaMotion</div>
+                  <div className="text-slate-300 text-[9px]">Belief Γ_t + V19 PID D_t Damping</div>
+                </div>
+                <div className="p-1.5 rounded-lg bg-slate-900/90 border border-slate-800">
+                  <div className="text-emerald-400 font-bold">OmegaCharacter</div>
+                  <div className="text-slate-300 text-[9px]">Identity Drift EMA-Lock (Ψ = {(engineBlueprint.ovoTelemetry.summaryMetrics.meanPsiConfidence * 100).toFixed(1)}%)</div>
+                </div>
+                <div className="p-1.5 rounded-lg bg-slate-900/90 border border-slate-800">
+                  <div className="text-amber-400 font-bold">OmegaPrompt</div>
+                  <div className="text-slate-300 text-[9px]">V15 Closed-Loop CFG & Steps</div>
+                </div>
+                <div className="p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 col-span-2 sm:col-span-1">
+                  <div className="text-pink-400 font-bold">OmegaDirector</div>
+                  <div className="text-slate-300 text-[9px] truncate">{engineBlueprint.ovoTelemetry.directorSelection.selectedModelName}</div>
+                </div>
+              </div>
+              <div className="text-[10px] text-slate-300 leading-relaxed">
+                {engineBlueprint.ovoTelemetry.scientificVerdictAr}
+              </div>
             </div>
-            <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
-              <div className="text-blue-400 font-semibold mb-0.5">3. توليد حركة المشهد</div>
-              <div className="text-slate-300">Veo / Runway / Wan 2.2</div>
-            </div>
-            <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
-              <div className="text-emerald-400 font-semibold mb-0.5">4. تحريك الملامح (512D)</div>
-              <div className="text-slate-300">LivePortrait / Hallo</div>
-            </div>
-            <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
-              <div className="text-pink-400 font-semibold mb-0.5">5. مزامنة الشفاه</div>
-              <div className="text-slate-300">MuseTalk / Sync Labs</div>
-            </div>
-            <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
-              <div className="text-amber-400 font-semibold mb-0.5">6. الصوت والمؤثرات</div>
-              <div className="text-slate-300">ElevenLabs / XTTS v2</div>
-            </div>
-            <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 col-span-1 sm:col-span-2">
-              <div className="text-violet-400 font-semibold mb-0.5">7. المونتاج والشارة الإلزامية</div>
-              <div className="text-slate-300">FFmpeg + Remotion (معادلات KaTeX وشارة الشفافية)</div>
-            </div>
-          </div>
+          )}
 
           <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-950/40 border border-amber-500/30 text-[10px] text-amber-300">
             <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-400" />
